@@ -1,0 +1,585 @@
+{
+  "calculationVersion": "2B-0.1.0",
+  "baseContractVersion": "2A-0.1.0",
+  "scope": "simulation_design",
+  "metrics": [
+    {
+      "metricId": "M-CASH",
+      "name": "实际可用资金",
+      "inputPaths": [
+        "settledBalanceYuan",
+        "localReservedYuan",
+        "platformReservedYuan",
+        "payableReservedYuan"
+      ],
+      "formula": "settled-local-platform-payable",
+      "unit": "CNY_yuan_integer",
+      "rounding": "整数精确；检查中间值安全范围",
+      "observedAt": "规范化snapshot及连续已应用水位",
+      "update": "权威事件/本地锁原子更新",
+      "provenance": "docs/数据接口合同.md"
+    },
+    {
+      "metricId": "M-NOMINAL",
+      "name": "目标与待安排",
+      "inputPaths": [
+        "targetYuan",
+        "filledYuan",
+        "lockedYuan"
+      ],
+      "formula": "remaining=target-filled; arrangeable=remaining-locked",
+      "unit": "CNY_yuan_integer",
+      "rounding": "整数精确",
+      "observedAt": "当前计划版本与事实水位",
+      "update": "计划新版本/成交/发送锁/确认释放",
+      "provenance": "docs/数据接口合同.md"
+    },
+    {
+      "metricId": "M-A-EXPOSURE",
+      "name": "A银行集中度演示",
+      "inputPaths": [
+        "numeratorYuan",
+        "navYuan",
+        "basis",
+        "snapshotSequence",
+        "includedPendingExposure",
+        "pendingAdds"
+      ],
+      "formula": "AExposure/nav; use exact cross multiplication for threshold",
+      "unit": "decimal_ratio",
+      "rounding": "判断不先四舍五入；展示百分数两位小数、HALF_UP，仅显示",
+      "observedAt": "投前判定；投后演示变化；NAV本例固定500亿",
+      "update": "新增存款/A存单确认成交加相应敞口；待成交新增按审慎有效敞口评估，明确剔重",
+      "provenance": "docs/阶段1多交易场景复核.md"
+    },
+    {
+      "metricId": "M-PEAK",
+      "name": "未融资路径峰值",
+      "inputPaths": [
+        "initialAvailableYuan",
+        "orderedKnownCashDeltasYuan"
+      ],
+      "formula": "max over prefixes(max(0,-(initial+sum(prefix cash))))",
+      "unit": "CNY_yuan_integer",
+      "rounding": "整数精确；阻断路径完整峰值/终局null",
+      "observedAt": "假设事件路径每步，非实际发生",
+      "update": "仅更新预演，不改变事实可用",
+      "provenance": "docs/阶段1多交易场景复核.md"
+    },
+    {
+      "metricId": "M-HEADROOM",
+      "name": "8.2%软观察线余量",
+      "inputPaths": [
+        "postExposureYuan",
+        "navYuan"
+      ],
+      "formula": "(82*nav-1000*postExposure)/1000",
+      "unit": "CNY_yuan_decimal",
+      "rounding": "保留精确有理数或十进制；只在可整除的基准用例中存整数；不作放行阈值",
+      "observedAt": "候选路径全部必要投后状态取最小余量",
+      "update": "只作软观察诊断，不充当Preferences.metric_headroom；正式硬指标余量未定义时该偏好标待补",
+      "provenance": "synthetic:2B observation line"
+    },
+    {
+      "metricId": "M-NEW-WARN",
+      "name": "新增或加重风险实例数",
+      "inputPaths": [
+        "currentWarningInstances",
+        "projectedWarningInstances"
+      ],
+      "formula": "count unique(ruleId,scopeKey,version,severity-band) newly triggered or worsened vs common baseline",
+      "unit": "count",
+      "rounding": "整数去重，不按日志行数",
+      "observedAt": "同一候选全部步骤",
+      "update": "解除的原预警不当新增；实例风险变化需重审",
+      "provenance": "docs/开发阶段路线图.md"
+    }
+  ],
+  "rules": [
+    {
+      "ruleId": "DEMO-CASH-01",
+      "version": "2B-0.1.0",
+      "legacyIds": [
+        "DEMO-CASH"
+      ],
+      "name": "资金与净需求",
+      "category": "calculation",
+      "sourceClass": "documented_demo",
+      "sourceRef": "docs/阶段1多交易场景复核.md",
+      "appliesTo": [
+        "all_cash_consuming"
+      ],
+      "evaluationPoints": [
+        "projection",
+        "before_send"
+      ],
+      "inputPaths": [
+        "Cash.availableYuan",
+        "requiredCashYuan",
+        "feeYuan",
+        "bufferYuan",
+        "confirmedCashEvents"
+      ],
+      "formula": "available=settled-local-platform-payable; baseNetGap=max(0,remainingOutflow-currentAvailable-expectedSale); allInGap=max(0,remainingOutflow+unembeddedFee+buffer-currentAvailable-expectedSale)",
+      "comparison": "actual_after>=buffer; projection_gap=max(0,-projection_balance)",
+      "threshold": null,
+      "unit": "CNY_yuan_integer",
+      "missingPolicy": "block_dependent_only",
+      "effect": "未融资投影可负；实际发送不得透支；净需求含预计回款条件，未知费用不补0",
+      "formalConfirmed": false,
+      "implementation": "design_only"
+    },
+    {
+      "ruleId": "DEMO-CASH-02",
+      "version": "2B-0.1.0",
+      "legacyIds": [],
+      "name": "融资只有确认可用才计入",
+      "category": "hard_gate",
+      "sourceClass": "documented_demo",
+      "sourceRef": "docs/阶段1多交易场景复核.md",
+      "appliesTo": [
+        "external_funding"
+      ],
+      "evaluationPoints": [
+        "cash_available",
+        "before_send"
+      ],
+      "inputPaths": [
+        "CashFlow.cashFlowId",
+        "CashFlow.status",
+        "Event.eventType",
+        "Event.cashYuan"
+      ],
+      "formula": "available inflow=sum(unique confirmed cash_available tranches)",
+      "comparison": "eventType==cash_available and sameReference",
+      "threshold": null,
+      "unit": "CNY_yuan_integer",
+      "missingPolicy": "block_dependent_only",
+      "effect": "额度/申请/成交不增加可用资金；不自动新增融资",
+      "formalConfirmed": false,
+      "implementation": "design_only"
+    },
+    {
+      "ruleId": "DEMO-CASH-03",
+      "version": "2B-0.1.0",
+      "legacyIds": [],
+      "name": "卖券回款可用确认",
+      "category": "hard_gate",
+      "sourceClass": "documented_demo",
+      "sourceRef": "docs/阶段1多交易场景复核.md",
+      "appliesTo": [
+        "cd_sell"
+      ],
+      "evaluationPoints": [
+        "fill",
+        "cash_settled",
+        "cash_available"
+      ],
+      "inputPaths": [
+        "CashFlow.status",
+        "Event.cashFlowId"
+      ],
+      "formula": "sale credit occurs once per cash_available cashFlowId",
+      "comparison": "cash_settled != cash_available",
+      "threshold": null,
+      "unit": "CNY_yuan_integer",
+      "missingPolicy": "block_dependent_only",
+      "effect": "卖券成交与结算不提前提供后续现金",
+      "formalConfirmed": false,
+      "implementation": "design_only"
+    },
+    {
+      "ruleId": "DEMO-EXP-01",
+      "version": "2B-0.1.0",
+      "legacyIds": [
+        "DEMO-DEP-8",
+        "DEMO-RULE-SINGLE-BANK-8PCT",
+        "RULE-009"
+      ],
+      "name": "A银行新增存款投前8%演示限制",
+      "category": "hard_gate",
+      "sourceClass": "documented_demo",
+      "sourceRef": "docs/阶段1多交易场景复核.md",
+      "appliesTo": [
+        "deposit:A"
+      ],
+      "evaluationPoints": [
+        "before_deposit",
+        "before_send"
+      ],
+      "inputPaths": [
+        "numeratorYuan",
+        "navYuan",
+        "basis",
+        "snapshotSequence",
+        "includedPendingExposure",
+        "pendingAdds"
+      ],
+      "formula": "block iff 100*effectiveExposureYuan > 8*navYuan",
+      "comparison": "strict_gt_pretrade",
+      "threshold": "0.08",
+      "unit": "decimal_ratio",
+      "missingPolicy": "block_dependent_only",
+      "effect": "先判适用性；仅新增A银行存款受限；关键分子/分母/重复占用映射缺失记missing，不影响无关动作",
+      "formalConfirmed": false,
+      "implementation": "design_only"
+    },
+    {
+      "ruleId": "DEMO-WARN-01",
+      "version": "2B-0.1.0",
+      "legacyIds": [
+        "DEMO-WARN-82"
+      ],
+      "name": "A银行8.2%软观察线",
+      "category": "warning",
+      "sourceClass": "synthetic_demo",
+      "sourceRef": "docs/design/dense-data.js#DEMO-WARN-01",
+      "appliesTo": [
+        "portfolio:A_monitor"
+      ],
+      "evaluationPoints": [
+        "after_projection",
+        "before_send"
+      ],
+      "inputPaths": [
+        "postExposureYuan",
+        "navYuan"
+      ],
+      "formula": "warn iff 1000*postExposureYuan >= 82*navYuan; headroom=0.082*nav-postExposure",
+      "comparison": "gte_posttrade",
+      "threshold": "0.082",
+      "unit": "decimal_ratio",
+      "missingPolicy": "block_dependent_only",
+      "effect": "只提示；观察线余量不是新增存款硬额度；同一风险实例去重，不逐行重复计数",
+      "formalConfirmed": false,
+      "implementation": "design_only"
+    },
+    {
+      "ruleId": "DEMO-PATH-01",
+      "version": "2B-0.1.0",
+      "legacyIds": [],
+      "name": "事件级依赖",
+      "category": "hard_gate",
+      "sourceClass": "design_inference",
+      "sourceRef": "docs/开发阶段路线图.md",
+      "appliesTo": [
+        "all_instructions"
+      ],
+      "evaluationPoints": [
+        "proposal",
+        "before_send"
+      ],
+      "inputPaths": [
+        "InstructionSpec.conditions",
+        "Event",
+        "CashFlow",
+        "InstructionFact.filledYuan"
+      ],
+      "formula": "AND over kind,referenceId,cumulative confirmed amount",
+      "comparison": ">= required amount",
+      "threshold": null,
+      "unit": "CNY_yuan_integer",
+      "missingPolicy": "block_dependent_only",
+      "effect": "A先发送不能证明A成交；批内未来到账不支持当前同批；明确存款成交后再发存单",
+      "formalConfirmed": false,
+      "implementation": "design_only"
+    },
+    {
+      "ruleId": "DEMO-BATCH-01",
+      "version": "2B-0.1.0",
+      "legacyIds": [],
+      "name": "批次累计现金与执行顺序",
+      "category": "hard_gate",
+      "sourceClass": "design_inference",
+      "sourceRef": "docs/开发阶段路线图.md",
+      "appliesTo": [
+        "all_cash_consuming"
+      ],
+      "evaluationPoints": [
+        "prepareDispatch",
+        "dispatch"
+      ],
+      "inputPaths": [
+        "requiredCashYuan[]",
+        "availableYuan",
+        "bufferYuan",
+        "dependencies"
+      ],
+      "formula": "sum(requiredCashYuan)<=availableYuan-bufferYuan",
+      "comparison": "lte",
+      "threshold": null,
+      "unit": "CNY_yuan_integer",
+      "missingPolicy": "block_dependent_only",
+      "effect": "每笔不复用余额；所有可能执行次序安全才能并行；缺证明则拆成手动条件批次",
+      "formalConfirmed": false,
+      "implementation": "design_only"
+    },
+    {
+      "ruleId": "DEMO-LINK-01",
+      "version": "2B-0.1.0",
+      "legacyIds": [],
+      "name": "名义关联及事件去重",
+      "category": "protocol",
+      "sourceClass": "design_inference",
+      "sourceRef": "docs/数据接口合同.md",
+      "appliesTo": [
+        "all_events"
+      ],
+      "evaluationPoints": [
+        "receiveEvent",
+        "loadRun"
+      ],
+      "inputPaths": [
+        "eventId",
+        "sourceSequence",
+        "fillId",
+        "cashFlowId",
+        "planId"
+      ],
+      "formula": "one economic fact once; target=filled+locked+arrangeable",
+      "comparison": "identity_and_conservation",
+      "threshold": null,
+      "unit": "CNY_yuan_integer",
+      "missingPolicy": "block_dependent_only",
+      "effect": "延续2A协议和验证；重复/乱序/覆盖快照不能二计",
+      "formalConfirmed": false,
+      "implementation": "design_only"
+    },
+    {
+      "ruleId": "DEMO-OCC-01",
+      "version": "2B-0.1.0",
+      "legacyIds": [],
+      "name": "现金占用迁移及双证据释放",
+      "category": "protocol",
+      "sourceClass": "design_inference",
+      "sourceRef": "docs/数据接口合同.md",
+      "appliesTo": [
+        "outflow_fill",
+        "cancel_confirmed"
+      ],
+      "evaluationPoints": [
+        "receiveEvent"
+      ],
+      "inputPaths": [
+        "reservedCashYuan",
+        "cashYuan",
+        "CancellationSlice",
+        "CashAllocation"
+      ],
+      "formula": "fill: platform-=r,payable+=p; settle: settled-=p,payable-=p; cancellation release only matched slice",
+      "comparison": "reconcile per reservationId",
+      "threshold": null,
+      "unit": "CNY_yuan_integer",
+      "missingPolicy": "block_dependent_only",
+      "effect": "r与p可不同；未知应付保守持有；取消累计名义与现金释放配对",
+      "formalConfirmed": false,
+      "implementation": "design_only"
+    },
+    {
+      "ruleId": "DEMO-VERSION-01",
+      "version": "2B-0.1.0",
+      "legacyIds": [],
+      "name": "审核内容、版本及手动下达",
+      "category": "protocol",
+      "sourceClass": "design_inference",
+      "sourceRef": "docs/数据接口合同.md",
+      "appliesTo": [
+        "all_instructions"
+      ],
+      "evaluationPoints": [
+        "approve",
+        "prepareDispatch",
+        "dispatch"
+      ],
+      "inputPaths": [
+        "Approval",
+        "Confirmation",
+        "CommandReceipt",
+        "context",
+        "versions"
+      ],
+      "formula": "scope exact; config/plan/content/new warnings changed => reapproval",
+      "comparison": "exact_content_and_versions",
+      "threshold": null,
+      "unit": "none",
+      "missingPolicy": "block_dependent_only",
+      "effect": "条件兑现不自动发送；纯刷新不一概重审；新风险及参数修改需重审",
+      "formalConfirmed": false,
+      "implementation": "design_only"
+    },
+    {
+      "ruleId": "DEMO-MISSING-01",
+      "version": "2B-0.1.0",
+      "legacyIds": [],
+      "name": "关键缺数限制依赖项",
+      "category": "hard_gate",
+      "sourceClass": "design_inference",
+      "sourceRef": "docs/数据接口合同.md",
+      "appliesTo": [
+        "dependent_actions"
+      ],
+      "evaluationPoints": [
+        "calculate",
+        "before_send"
+      ],
+      "inputPaths": [
+        "applicability",
+        "requiredInputs",
+        "quality"
+      ],
+      "formula": "known not-applicable => not_applicable; required unknown => missing",
+      "comparison": "null!=0; unknown applicability!=N/A",
+      "threshold": null,
+      "unit": "none",
+      "missingPolicy": "block_dependent_only",
+      "effect": "软观察指标缺数只显示missing；若仍为发送必需则相应指令不得放行",
+      "formalConfirmed": false,
+      "implementation": "design_only"
+    },
+    {
+      "ruleId": "DEMO-TARGET-01",
+      "version": "2B-0.1.0",
+      "legacyIds": [],
+      "name": "分次目标守恒与单位",
+      "category": "hard_gate",
+      "sourceClass": "design_inference",
+      "sourceRef": "docs/开发阶段路线图.md",
+      "appliesTo": [
+        "all_plans"
+      ],
+      "evaluationPoints": [
+        "proposal",
+        "updatePlan"
+      ],
+      "inputPaths": [
+        "targetYuan",
+        "filledYuan",
+        "lockedYuan",
+        "availableYuan",
+        "unitYuan",
+        "feeYuan",
+        "bufferYuan"
+      ],
+      "formula": "arrangeable=target-filled-locked; candidateMax=min(arrangeable,floor(max(0,available-unembeddedFee-buffer)/unit)*unit); enumerate permitted positive unit multiples <= candidateMax and explicit conditional remainder; never equate this upper bound with final recommendation",
+      "comparison": "target and residual preserved",
+      "threshold": null,
+      "unit": "CNY_yuan_integer",
+      "missingPolicy": "block_dependent_only",
+      "effect": "只生成建议不记锁；非整单位的剩余目标不能丢弃；固定费用上限只适用于显式用例",
+      "formalConfirmed": false,
+      "implementation": "design_only"
+    },
+    {
+      "ruleId": "DEMO-PREFERENCE-01",
+      "version": "2B-0.1.0",
+      "legacyIds": [],
+      "name": "硬筛选后按偏好字典序",
+      "category": "calculation",
+      "sourceClass": "design_inference",
+      "sourceRef": "docs/开发阶段路线图.md",
+      "appliesTo": [
+        "complete_candidates"
+      ],
+      "evaluationPoints": [
+        "rank"
+      ],
+      "inputPaths": [
+        "hardPass",
+        "completeTarget",
+        "inputsComplete",
+        "peakFundingYuan",
+        "warningsNew",
+        "headroomYuan",
+        "priority",
+        "comparisonGroupId",
+        "executionClass"
+      ],
+      "formula": "hard-filter then lexicographic; default=(peakFunding asc,newRiskCount asc,known shared hard-limit headroom desc,canonical candidateId asc); missing optional headroom excluded explicitly",
+      "comparison": "lexicographic_no_weighted_override",
+      "threshold": null,
+      "unit": "mixed_units_compared_separately",
+      "missingPolicy": "block_dependent_only",
+      "effect": "仅同场景/资金条件/约束集合可比较；高优先级不能被低优先级分数抵消",
+      "formalConfirmed": false,
+      "implementation": "design_only"
+    },
+    {
+      "ruleId": "DEMO-SEARCH-01",
+      "version": "2B-0.1.0",
+      "legacyIds": [],
+      "name": "有限搜索与证明边界",
+      "category": "calculation",
+      "sourceClass": "design_inference",
+      "sourceRef": "docs/开发阶段路线图.md",
+      "appliesTo": [
+        "search_result"
+      ],
+      "evaluationPoints": [
+        "proposal"
+      ],
+      "inputPaths": [
+        "inputCompleteness",
+        "candidateDomain",
+        "searched",
+        "total",
+        "proof",
+        "conditions",
+        "proof.closedResourceSet",
+        "proof.finiteDomain"
+      ],
+      "formula": "missing=>insufficient_data; full feasible with external conditions=>waiting_conditions; found=>feasible; bounded failure=>search_exhausted",
+      "comparison": "explicit_scope_for_infeasibility",
+      "threshold": null,
+      "unit": "none",
+      "missingPolicy": "block_dependent_only",
+      "effect": "证明固定资金冲突或穷尽明确有限域才能该范围内proven_infeasible；拒绝一条路径不代表全局无解",
+      "formalConfirmed": false,
+      "implementation": "design_only"
+    }
+  ],
+  "pendingFormalInputs": [
+    {
+      "id": "CORE-METRICS",
+      "title": "首批核心指标名称/公式/分子分母/舍入",
+      "value": null,
+      "blocks": "相应正式指标2B与4A；不阻塞演示资金与集中度基线"
+    },
+    {
+      "id": "FORMAL-LIMITS",
+      "title": "正式阈值/比较符号/适用范围/判断时点/版本",
+      "value": null,
+      "blocks": "正式规则结论和真实发送；本例仅演示"
+    },
+    {
+      "id": "CASH-FEE",
+      "title": "分业务实际现金、价格、利息、费用和安全垫",
+      "value": null,
+      "blocks": "相应正式现金精算；本例同额显式合成"
+    },
+    {
+      "id": "FINANCE",
+      "title": "融资额度、质押券、到账协议",
+      "value": null,
+      "blocks": "融资可获得性及自动安排；缺口计算仍可做"
+    },
+    {
+      "id": "EXPOSURE-MAPPING",
+      "title": "持仓敞口是否包含在途、冲销与权威字段",
+      "value": null,
+      "blocks": "正式敞口更新；合成例明确无在途、固定NAV"
+    },
+    {
+      "id": "TRADING-UNITS",
+      "title": "正式最小交易单位与时间窗口",
+      "value": null,
+      "blocks": "自由交易最终执行；100万元等单位只限合成用例"
+    }
+  ],
+  "limitations": [
+    "本规则书未实现求值器或排单服务",
+    "不将102项指标直接视为完整规则库",
+    "2A合同保持不变，2B附加字段须经后续合同版本化再接入",
+    "空规则或尚未计算不能标为全部通过",
+    "实际账户与原件只读；没有真实AI或交易接口"
+  ]
+}

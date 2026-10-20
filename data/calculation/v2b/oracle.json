@@ -1,0 +1,142 @@
+{
+  "oracleVersion": "2B-independent-0.1.0",
+  "status": "design_expectations_not_application_results",
+  "unit": "CNY_yuan_integer",
+  "ratioUnit": "decimal_string",
+  "scope": "Synthetic S13 and S10 examples; no production rule or transaction authorization",
+  "sources": [
+    "docs/阶段1多交易场景复核.md",
+    "docs/模拟数据与操作模型.md",
+    "docs/阶段2A最小验证用例.md"
+  ],
+  "s13": {
+    "inputs": {
+      "openingAvailableYuan": 300000000,
+      "navYuan": 50000000000,
+      "initialABankExposureYuan": 3950000000,
+      "targetOutflowYuan": 1300000000,
+      "saleInflowTargetYuan": 200000000,
+      "demoFeeYuan": 0,
+      "demoBufferYuan": 0,
+      "actions": {
+        "SELL_AVAILABLE": {"cashDeltaYuan": 200000000, "aExposureDeltaYuan": 0, "condition": "B-bank CD sale proceeds confirmed cash_available"},
+        "DEPOSIT": {"cashDeltaYuan": -100000000, "aExposureDeltaYuan": 100000000, "hardRule": "pre-trade A exposure / NAV > 0.08 blocks only new A-bank deposit"},
+        "CD_BUY": {"cashDeltaYuan": -100000000, "aExposureDeltaYuan": 100000000},
+        "BOND_BUY": {"cashDeltaYuan": -100000000, "aExposureDeltaYuan": 0},
+        "REPO": {"cashDeltaYuan": -1000000000, "aExposureDeltaYuan": 0}
+      }
+    },
+    "commonExpectation": {
+      "unfinancedCompletedTerminalBalanceYuan": -800000000,
+      "unfinancedCompletedTerminalGapYuan": 800000000,
+      "withSeparateConfirmedFinancing500000000TerminalGapYuan": 300000000,
+      "fullOutflowNominalTargetYuan": 1300000000,
+      "saleDoesNotReduceOutflowNominalTarget": true
+    },
+    "paths": {
+      "A": {
+        "order": ["SELL_AVAILABLE", "DEPOSIT", "CD_BUY", "BOND_BUY", "REPO"],
+        "steps": [
+          {"step": 0, "action": "OPEN", "balanceYuan": 300000000, "gapYuan": 0, "aExposureBeforeYuan": 3950000000, "aExposureAfterYuan": 3950000000, "aRatioBefore": "0.079", "aRatioAfter": "0.079"},
+          {"step": 1, "action": "SELL_AVAILABLE", "balanceYuan": 500000000, "gapYuan": 0, "aExposureBeforeYuan": 3950000000, "aExposureAfterYuan": 3950000000, "aRatioBefore": "0.079", "aRatioAfter": "0.079"},
+          {"step": 2, "action": "DEPOSIT", "balanceYuan": 400000000, "gapYuan": 0, "aExposureBeforeYuan": 3950000000, "aExposureAfterYuan": 4050000000, "aRatioBefore": "0.079", "aRatioAfter": "0.081", "depositHardBlocked": false},
+          {"step": 3, "action": "CD_BUY", "balanceYuan": 300000000, "gapYuan": 0, "aExposureBeforeYuan": 4050000000, "aExposureAfterYuan": 4150000000, "aRatioBefore": "0.081", "aRatioAfter": "0.083", "depositHardRuleApplicable": false, "postSoftWarning": true},
+          {"step": 4, "action": "BOND_BUY", "balanceYuan": 200000000, "gapYuan": 0, "aExposureBeforeYuan": 4150000000, "aExposureAfterYuan": 4150000000, "aRatioBefore": "0.083", "aRatioAfter": "0.083"},
+          {"step": 5, "action": "REPO", "balanceYuan": -800000000, "gapYuan": 800000000, "aExposureBeforeYuan": 4150000000, "aExposureAfterYuan": 4150000000, "aRatioBefore": "0.083", "aRatioAfter": "0.083"}
+        ],
+        "peakUnfinancedGapYuan": 800000000,
+        "terminalUnfinancedBalanceYuan": -800000000,
+        "fullRepoBeforeStep5RequiresAdditionalConfirmedCashYuan": 800000000
+      },
+      "B": {
+        "attemptOrder": ["SELL_AVAILABLE", "CD_BUY", "DEPOSIT"],
+        "steps": [
+          {"step": 0, "action": "OPEN", "balanceYuan": 300000000, "gapYuan": 0, "aExposureBeforeYuan": 3950000000, "aExposureAfterYuan": 3950000000, "aRatioBefore": "0.079", "aRatioAfter": "0.079"},
+          {"step": 1, "action": "SELL_AVAILABLE", "balanceYuan": 500000000, "gapYuan": 0, "aExposureBeforeYuan": 3950000000, "aExposureAfterYuan": 3950000000, "aRatioBefore": "0.079", "aRatioAfter": "0.079"},
+          {"step": 2, "action": "CD_BUY", "balanceYuan": 400000000, "gapYuan": 0, "aExposureBeforeYuan": 3950000000, "aExposureAfterYuan": 4050000000, "aRatioBefore": "0.079", "aRatioAfter": "0.081", "depositHardRuleApplicable": false},
+          {"step": 3, "action": "DEPOSIT_ATTEMPT_BLOCKED", "balanceYuan": 400000000, "gapYuan": 0, "aExposureBeforeYuan": 4050000000, "aExposureAfterYuan": 4050000000, "aRatioBefore": "0.081", "aRatioAfter": "0.081", "depositHardBlocked": true, "uncompletedDepositNominalYuan": 100000000}
+        ],
+        "peakUnfinancedGapYuan": null,
+        "terminalUnfinancedBalanceYuan": null,
+        "fullTargetCompleted": false,
+        "reason": "DEPOSIT pre-trade exposure 4050000000 / 50000000000 = 0.081 > 0.08; later actions are not treated as completed"
+      },
+      "C": {
+        "order": ["DEPOSIT", "CD_BUY", "BOND_BUY", "REPO", "SELL_AVAILABLE"],
+        "steps": [
+          {"step": 0, "action": "OPEN", "balanceYuan": 300000000, "gapYuan": 0, "aExposureBeforeYuan": 3950000000, "aExposureAfterYuan": 3950000000, "aRatioBefore": "0.079", "aRatioAfter": "0.079"},
+          {"step": 1, "action": "DEPOSIT", "balanceYuan": 200000000, "gapYuan": 0, "aExposureBeforeYuan": 3950000000, "aExposureAfterYuan": 4050000000, "aRatioBefore": "0.079", "aRatioAfter": "0.081", "depositHardBlocked": false},
+          {"step": 2, "action": "CD_BUY", "balanceYuan": 100000000, "gapYuan": 0, "aExposureBeforeYuan": 4050000000, "aExposureAfterYuan": 4150000000, "aRatioBefore": "0.081", "aRatioAfter": "0.083", "depositHardRuleApplicable": false, "postSoftWarning": true},
+          {"step": 3, "action": "BOND_BUY", "balanceYuan": 0, "gapYuan": 0, "aExposureBeforeYuan": 4150000000, "aExposureAfterYuan": 4150000000, "aRatioBefore": "0.083", "aRatioAfter": "0.083"},
+          {"step": 4, "action": "REPO", "balanceYuan": -1000000000, "gapYuan": 1000000000, "aExposureBeforeYuan": 4150000000, "aExposureAfterYuan": 4150000000, "aRatioBefore": "0.083", "aRatioAfter": "0.083"},
+          {"step": 5, "action": "SELL_AVAILABLE", "balanceYuan": -800000000, "gapYuan": 800000000, "aExposureBeforeYuan": 4150000000, "aExposureAfterYuan": 4150000000, "aRatioBefore": "0.083", "aRatioAfter": "0.083"}
+        ],
+        "peakUnfinancedGapYuan": 1000000000,
+        "terminalUnfinancedBalanceYuan": -800000000,
+        "fullRepoBeforeStep4RequiresAdditionalConfirmedCashYuan": 1000000000
+      }
+    },
+    "exhaustiveFiveActionOrderOracle": {
+      "searchScope": "All 5! permutations of five distinct whole-nominal actions; no splitting, automatic financing, or unconfirmed sale inflow",
+      "totalPermutations": 120,
+      "hardRuleLegalCondition": "DEPOSIT index < CD_BUY index",
+      "hardRuleLegalCount": 60,
+      "hardRuleOrderConflictCount": 60,
+      "legalPathMinimumPeakGapYuan": 800000000,
+      "legalPeakGapCounts": {"800000000": 39, "900000000": 9, "1000000000": 12},
+      "countBySellAndRepo": {
+        "sellBeforeRepo": {"total": 30, "peak800000000": 30},
+        "repoBeforeSell": {"total": 30, "bySmallOutflowsBeforeSell": {"0": 3, "1": 6, "2": 9, "3": 12}}
+      },
+      "representatives": {
+        "800000000": ["SELL_AVAILABLE", "DEPOSIT", "CD_BUY", "BOND_BUY", "REPO"],
+        "900000000": ["DEPOSIT", "CD_BUY", "REPO", "SELL_AVAILABLE", "BOND_BUY"],
+        "1000000000": ["DEPOSIT", "CD_BUY", "BOND_BUY", "REPO", "SELL_AVAILABLE"]
+      },
+      "allCompletedLegalPathsTerminalBalanceYuan": -800000000,
+      "zeroAdditionalCashAllowsFullRealTimeExecution": false,
+      "oneBlockedPathProvesGlobalInfeasibility": false
+    }
+  },
+  "documentedFiveScenarios": {
+    "SC-01-FULL-INTENT": {"openingAvailableYuan": 300000000, "repoIntentYuan": 1000000000, "unfundedDifferenceYuan": 700000000, "intentMayBeSaved": true, "sendWithoutFunds": false},
+    "SC-02-FULL-PLAN": {"outflowTargetYuan": 1300000000, "openingAvailableYuan": 300000000, "expectedSaleInflowYuan": 200000000, "terminalGapIfSaleAvailableYuan": 800000000, "saleExpectedIsCurrentAvailable": false},
+    "SC-03-INTRADAY-REORDER": {"openingYuan": 300000000, "confirmedFinancingYuan": 500000000, "repoAlreadyReservedYuan": 300000000, "currentAvailableYuan": 500000000, "remainingOutflowsYuan": 1000000000, "expectedSaleInflowYuan": 200000000, "additionalNetGapIfSaleAvailableYuan": 300000000, "timingGapBeforeSaleAvailableYuan": 500000000},
+    "SC-04-DEPOSIT-FIRST": {"ratioPath": ["0.079", "0.081", "0.083"], "depositBlockedByDemoRule": false, "cdBuyBlockedByDepositOnlyRule": false},
+    "SC-05-CD-FIRST": {"ratioPathUntilBlock": ["0.079", "0.081"], "laterDepositBlockedByDemoRule": true, "afterBlockedDepositRatio": null}
+  },
+  "s10": {
+    "separateRunFromS13": true,
+    "targetNominalYuan": 1000000000,
+    "initialAvailableYuan": 300000000,
+    "explicitDemoFeeYuan": 0,
+    "explicitDemoBufferYuan": 0,
+    "approvedA": {"nominalYuan": 300000000, "cashRequiredYuan": 300000000},
+    "approvedB": {"nominalYuan": 700000000, "cashRequiredYuan": 700000000, "conditions": ["A fill confirmed for all 300000000 nominal", "separate 700000000 cash_available confirmed", "latest checks pass", "second manual dispatch"]},
+    "beforeACashAvailableYuan": 300000000,
+    "afterAReservedCashAvailableYuan": 0,
+    "afterAFilledAndSettled": {"filledNominalYuan": 300000000, "remainingNominalYuan": 700000000, "cashAvailableYuan": 0},
+    "afterSeparate700000000Available": {"cashAvailableYuan": 700000000, "bMayBeManuallyDispatchedAfterRecheck": true},
+    "afterBReservedCashAvailableYuan": 0,
+    "afterBFilledAndSettled": {"filledNominalYuan": 1000000000, "remainingNominalYuan": 0, "cashAvailableYuan": 0},
+    "only500000000Arrives": {"originalApprovedB700000000Sendable": false, "remainingNominalYuan": 700000000, "changedB500000000RequiresNewApproval": true}
+  },
+  "additionalBoundaryExpectations": [
+    {"id": "B01-hard-below", "preExposureYuan": 3999999999, "navYuan": 50000000000, "action": "DEPOSIT", "hardBlocked": false, "basis": "pre exposure < 8% NAV"},
+    {"id": "B02-hard-equal", "preExposureYuan": 4000000000, "navYuan": 50000000000, "action": "DEPOSIT", "hardBlocked": false, "basis": "strict > 8%; equality passes this rule"},
+    {"id": "B03-hard-plus-one-yuan", "preExposureYuan": 4000000001, "navYuan": 50000000000, "action": "DEPOSIT", "hardBlocked": true, "basis": "one yuan above 8% NAV"},
+    {"id": "B04-soft-below", "postExposureYuan": 4099999999, "navYuan": 50000000000, "postSoftWarning": false, "basis": "post exposure < 8.2% NAV"},
+    {"id": "B05-soft-equal", "postExposureYuan": 4100000000, "navYuan": 50000000000, "postSoftWarning": true, "basis": "suggested post >= 8.2% observation line"},
+    {"id": "B06-soft-above", "postExposureYuan": 4100000001, "navYuan": 50000000000, "postSoftWarning": true, "softWarningIsHardBlock": false},
+    {"id": "B07-hard-action-scope", "preExposureYuan": 4050000000, "navYuan": 50000000000, "action": "CD_BUY", "depositOnlyHardRuleApplicable": false, "globalApproval": null, "basis": "other applicable rules still require checks"},
+    {"id": "B08-missing-nav", "preExposureYuan": 3950000000, "navYuan": null, "action": "DEPOSIT", "hardDecision": "DATA_INSUFFICIENT", "sendable": false},
+    {"id": "B09-missing-exposure", "preExposureYuan": null, "navYuan": 50000000000, "action": "DEPOSIT", "hardDecision": "DATA_INSUFFICIENT", "sendable": false},
+    {"id": "B10-batch-competes", "availableYuan": 300000000, "requiredCashYuan": [200000000, 200000000], "bufferYuan": 0, "batchRequiredCashYuan": 400000000, "batchSendable": false, "ifFirstAloneReservedSecondAvailableYuan": 100000000},
+    {"id": "B11-zero-fee-buffer", "availableYuan": 300000000, "principalCashYuan": 300000000, "feeYuan": 0, "bufferYuan": 0, "requiredCashYuan": 300000000, "sendableByCashOnly": true},
+    {"id": "B12-nonzero-fee-buffer", "availableYuan": 300000000, "principalCashYuan": 300000000, "feeYuan": 1000, "bufferYuan": 2000, "requiredCashYuan": 300001000, "sendableByCashOnly": false, "shortfallYuan": 3000},
+    {"id": "B13-fee-unknown", "availableYuan": 300000000, "principalCashYuan": 300000000, "feeYuan": null, "bufferYuan": 0, "cashDecision": "DATA_INSUFFICIENT", "sendable": false},
+    {"id": "B14-sale-not-yet-available", "openingAvailableYuan": 300000000, "saleSettledYuan": 200000000, "cashAvailableEventSeen": false, "currentAvailableYuan": 300000000, "expectedFutureAvailableYuan": 500000000},
+    {"id": "B15-unequal-r-p-fill", "settledBalanceYuan": 400000000, "platformReservedBeforeYuan": 302000000, "filledNominalYuan": 300000000, "reservedCashMigratedRYuan": 302000000, "confirmedPayablePYuan": 301000000, "platformReservedAfterYuan": 0, "payableReservedAfterYuan": 301000000, "availableBeforeYuan": 98000000, "availableAfterFillYuan": 99000000, "availableAfterSettlementYuan": 99000000, "settledBalanceAfterSettlementYuan": 99000000},
+    {"id": "B16-separate-five-yi-financing", "s13InitialYuan": 300000000, "separateConfirmedFinancingYuan": 500000000, "saleConfirmedAvailableYuan": 200000000, "s13TargetOutflowYuan": 1300000000, "remainingGapYuan": 300000000}
+  ]
+}

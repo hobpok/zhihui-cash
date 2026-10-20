@@ -1,0 +1,1813 @@
+{
+  "calculationVersion": "2B-0.1.0",
+  "ruleVersion": "2B-0.1.0",
+  "expectedOrigin": "independent_literal_expectations",
+  "cases": [
+    {
+      "caseId": "F01",
+      "title": "SC-01完整10亿目标资金差额",
+      "kind": "funding",
+      "sourceRef": "historical-scenario:SC-01-FULL-INTENT",
+      "ruleIds": [
+        "DEMO-CASH-01"
+      ],
+      "assumptions": [
+        "原文只给本金差额，保存目标不等于允许下达"
+      ],
+      "input": {
+        "initialYuan": 300000000,
+        "availableFundingYuan": 0,
+        "lockedOutflowYuan": 0,
+        "remainingOutflowYuan": 1000000000,
+        "expectedSaleYuan": 0,
+        "feeYuan": null,
+        "bufferYuan": null
+      },
+      "expected": {
+        "currentAvailableYuan": 300000000,
+        "baseNetGapYuan": 700000000,
+        "noSaleTimingGapYuan": 700000000,
+        "allInGapYuan": null,
+        "allInResult": "missing"
+      }
+    },
+    {
+      "caseId": "F02",
+      "title": "SC-02全13亿计划",
+      "kind": "funding",
+      "sourceRef": "historical-scenario:SC-02-FULL-PLAN",
+      "ruleIds": [
+        "DEMO-CASH-01"
+      ],
+      "assumptions": [
+        "预计2亿只参加带假设净需求，不进入当前可用"
+      ],
+      "input": {
+        "initialYuan": 300000000,
+        "availableFundingYuan": 0,
+        "lockedOutflowYuan": 0,
+        "remainingOutflowYuan": 1300000000,
+        "expectedSaleYuan": 200000000,
+        "feeYuan": null,
+        "bufferYuan": null
+      },
+      "expected": {
+        "currentAvailableYuan": 300000000,
+        "baseNetGapYuan": 800000000,
+        "noSaleTimingGapYuan": 1000000000,
+        "allInGapYuan": null,
+        "allInResult": "missing"
+      }
+    },
+    {
+      "caseId": "F03",
+      "title": "SC-03仅重排未锁定10亿",
+      "kind": "funding",
+      "sourceRef": "historical-scenario:SC-03-INTRADAY-REORDER",
+      "ruleIds": [
+        "DEMO-CASH-01",
+        "DEMO-OCC-01"
+      ],
+      "assumptions": [
+        "剩余10亿是尚可安排流出；仅占用3亿未成交时全局待完成仍13亿"
+      ],
+      "input": {
+        "initialYuan": 300000000,
+        "availableFundingYuan": 500000000,
+        "lockedOutflowYuan": 300000000,
+        "remainingOutflowYuan": 1000000000,
+        "expectedSaleYuan": 200000000,
+        "feeYuan": null,
+        "bufferYuan": null
+      },
+      "expected": {
+        "currentAvailableYuan": 500000000,
+        "baseNetGapYuan": 300000000,
+        "noSaleTimingGapYuan": 500000000,
+        "allInGapYuan": null,
+        "allInResult": "missing"
+      }
+    },
+    {
+      "caseId": "F04",
+      "title": "S13演示零费零垫",
+      "kind": "funding",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-CASH-01"
+      ],
+      "assumptions": [
+        "仅本合成用例费用与安全垫显式为0；不映射为正式默认"
+      ],
+      "input": {
+        "initialYuan": 300000000,
+        "availableFundingYuan": 0,
+        "lockedOutflowYuan": 0,
+        "remainingOutflowYuan": 1300000000,
+        "expectedSaleYuan": 200000000,
+        "feeYuan": 0,
+        "bufferYuan": 0
+      },
+      "expected": {
+        "currentAvailableYuan": 300000000,
+        "baseNetGapYuan": 800000000,
+        "noSaleTimingGapYuan": 1000000000,
+        "allInGapYuan": 800000000,
+        "allInResult": "known"
+      }
+    },
+    {
+      "caseId": "F05",
+      "title": "费用与安全垫另计",
+      "kind": "funding",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-CASH-01"
+      ],
+      "assumptions": [
+        "费用20万、安全垫100万均是独立合成输入，非正式测算"
+      ],
+      "input": {
+        "initialYuan": 300000000,
+        "availableFundingYuan": 0,
+        "lockedOutflowYuan": 0,
+        "remainingOutflowYuan": 1300000000,
+        "expectedSaleYuan": 200000000,
+        "feeYuan": 200000,
+        "bufferYuan": 1000000
+      },
+      "expected": {
+        "currentAvailableYuan": 300000000,
+        "baseNetGapYuan": 800000000,
+        "noSaleTimingGapYuan": 1000000000,
+        "allInGapYuan": 801200000,
+        "allInResult": "known"
+      }
+    },
+    {
+      "caseId": "D01",
+      "title": "SC-04先存款：7.9%可过本条",
+      "kind": "deposit_threshold",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-EXP-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "action": "deposit",
+        "exposureYuan": 3950000000,
+        "navYuan": 50000000000,
+        "addExposureYuan": 100000000
+      },
+      "expected": {
+        "result": "pass",
+        "crossProductDelta": "-5000000000",
+        "actualPostExposureYuan": 4050000000
+      }
+    },
+    {
+      "caseId": "D02",
+      "title": "SC-04再存单：8.1%不适用存款禁令",
+      "kind": "deposit_threshold",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-EXP-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "action": "cd_buy",
+        "exposureYuan": 4050000000,
+        "navYuan": 50000000000,
+        "addExposureYuan": 100000000
+      },
+      "expected": {
+        "result": "not_applicable",
+        "crossProductDelta": null,
+        "actualPostExposureYuan": 4150000000
+      }
+    },
+    {
+      "caseId": "D03",
+      "title": "SC-05先存单后的存款阻断",
+      "kind": "deposit_threshold",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-EXP-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "action": "deposit",
+        "exposureYuan": 4050000000,
+        "navYuan": 50000000000,
+        "addExposureYuan": 100000000
+      },
+      "expected": {
+        "result": "block",
+        "crossProductDelta": "5000000000",
+        "actualPostExposureYuan": 4050000000
+      }
+    },
+    {
+      "caseId": "D04",
+      "title": "恰好8%严格大于不阻断",
+      "kind": "deposit_threshold",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-EXP-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "action": "deposit",
+        "exposureYuan": 4000000000,
+        "navYuan": 50000000000,
+        "addExposureYuan": 100000000
+      },
+      "expected": {
+        "result": "pass",
+        "crossProductDelta": "0",
+        "actualPostExposureYuan": 4100000000
+      }
+    },
+    {
+      "caseId": "D05",
+      "title": "阈值上方仅1元仍阻断",
+      "kind": "deposit_threshold",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-EXP-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "action": "deposit",
+        "exposureYuan": 4000000001,
+        "navYuan": 50000000000,
+        "addExposureYuan": 100000000
+      },
+      "expected": {
+        "result": "block",
+        "crossProductDelta": "100",
+        "actualPostExposureYuan": 4000000001
+      }
+    },
+    {
+      "caseId": "D06",
+      "title": "缺NAV不能计算存款规则",
+      "kind": "deposit_threshold",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-EXP-01",
+        "DEMO-MISSING-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "action": "deposit",
+        "exposureYuan": 3950000000,
+        "navYuan": null,
+        "addExposureYuan": 100000000
+      },
+      "expected": {
+        "result": "missing",
+        "crossProductDelta": null,
+        "actualPostExposureYuan": null
+      }
+    },
+    {
+      "caseId": "D07",
+      "title": "零NAV为无效输入",
+      "kind": "deposit_threshold",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-EXP-01",
+        "DEMO-MISSING-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "action": "deposit",
+        "exposureYuan": 3950000000,
+        "navYuan": 0,
+        "addExposureYuan": 100000000
+      },
+      "expected": {
+        "result": "missing",
+        "crossProductDelta": null,
+        "actualPostExposureYuan": null
+      }
+    },
+    {
+      "caseId": "D08",
+      "title": "不适用动作不因缺NAV全局阻断",
+      "kind": "deposit_threshold",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-EXP-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "action": "bond_buy",
+        "exposureYuan": null,
+        "navYuan": null,
+        "addExposureYuan": 0
+      },
+      "expected": {
+        "result": "not_applicable",
+        "crossProductDelta": null,
+        "actualPostExposureYuan": null
+      }
+    },
+    {
+      "caseId": "D09",
+      "title": "存量已超限不自动禁止存单",
+      "kind": "deposit_threshold",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-EXP-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "action": "cd_buy",
+        "exposureYuan": 4500000000,
+        "navYuan": 50000000000,
+        "addExposureYuan": 100000000
+      },
+      "expected": {
+        "result": "not_applicable",
+        "crossProductDelta": null,
+        "actualPostExposureYuan": 4600000000
+      }
+    },
+    {
+      "caseId": "W01",
+      "title": "8.1%低于软观察线",
+      "kind": "warning_threshold",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-WARN-01"
+      ],
+      "assumptions": [
+        "8.2%为合成软观察线；余量不是正式硬限制额度"
+      ],
+      "input": {
+        "postExposureYuan": 4050000000,
+        "navYuan": 50000000000
+      },
+      "expected": {
+        "result": "pass",
+        "blocksByItself": false,
+        "headroomYuan": 50000000
+      }
+    },
+    {
+      "caseId": "W02",
+      "title": "恰好8.2%触发软预警",
+      "kind": "warning_threshold",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-WARN-01"
+      ],
+      "assumptions": [
+        "8.2%为合成软观察线；余量不是正式硬限制额度"
+      ],
+      "input": {
+        "postExposureYuan": 4100000000,
+        "navYuan": 50000000000
+      },
+      "expected": {
+        "result": "warn",
+        "blocksByItself": false,
+        "headroomYuan": 0
+      }
+    },
+    {
+      "caseId": "W03",
+      "title": "8.3%预警不直接禁存单",
+      "kind": "warning_threshold",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-WARN-01"
+      ],
+      "assumptions": [
+        "8.2%为合成软观察线；余量不是正式硬限制额度"
+      ],
+      "input": {
+        "postExposureYuan": 4150000000,
+        "navYuan": 50000000000
+      },
+      "expected": {
+        "result": "warn",
+        "blocksByItself": false,
+        "headroomYuan": -50000000
+      }
+    },
+    {
+      "caseId": "W04",
+      "title": "缺分子软指标不可计算",
+      "kind": "warning_threshold",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-WARN-01",
+        "DEMO-MISSING-01"
+      ],
+      "assumptions": [
+        "8.2%为合成软观察线；余量不是正式硬限制额度"
+      ],
+      "input": {
+        "postExposureYuan": null,
+        "navYuan": 50000000000
+      },
+      "expected": {
+        "result": "missing",
+        "blocksByItself": false,
+        "headroomYuan": null
+      }
+    },
+    {
+      "caseId": "B01",
+      "title": "两笔2亿争用同一3亿",
+      "kind": "batch_cash",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-BATCH-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "availableYuan": 300000000,
+        "requiredCashYuan": [
+          200000000,
+          200000000
+        ],
+        "bufferYuan": 0
+      },
+      "expected": {
+        "result": "block",
+        "totalRequiredYuan": 400000000,
+        "afterYuan": -100000000
+      }
+    },
+    {
+      "caseId": "B02",
+      "title": "合计等于可用可过资金条款",
+      "kind": "batch_cash",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-BATCH-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "availableYuan": 300000000,
+        "requiredCashYuan": [
+          100000000,
+          200000000
+        ],
+        "bufferYuan": 0
+      },
+      "expected": {
+        "result": "pass",
+        "totalRequiredYuan": 300000000,
+        "afterYuan": 0
+      }
+    },
+    {
+      "caseId": "B03",
+      "title": "资金相等但安全垫1元阻断",
+      "kind": "batch_cash",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-BATCH-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "availableYuan": 300000000,
+        "requiredCashYuan": [
+          100000000,
+          200000000
+        ],
+        "bufferYuan": 1
+      },
+      "expected": {
+        "result": "block",
+        "totalRequiredYuan": 300000000,
+        "afterYuan": 0
+      }
+    },
+    {
+      "caseId": "B04",
+      "title": "指令费用未能计入完整现金要求",
+      "kind": "batch_cash",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-BATCH-01",
+        "DEMO-MISSING-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "availableYuan": 300000000,
+        "requiredCashYuan": [
+          null
+        ],
+        "bufferYuan": 0
+      },
+      "expected": {
+        "result": "missing",
+        "totalRequiredYuan": null,
+        "afterYuan": null
+      }
+    },
+    {
+      "caseId": "B05",
+      "title": "安全垫未知不是0",
+      "kind": "batch_cash",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-BATCH-01",
+        "DEMO-MISSING-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "availableYuan": 300000000,
+        "requiredCashYuan": [
+          100000000
+        ],
+        "bufferYuan": null
+      },
+      "expected": {
+        "result": "missing",
+        "totalRequiredYuan": 100000000,
+        "afterYuan": 200000000
+      }
+    },
+    {
+      "caseId": "M01",
+      "title": "同额成交仅迁移占用",
+      "kind": "cash_migration",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-OCC-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "settledBeforeYuan": 300000000,
+        "platformBeforeYuan": 300000000,
+        "payableBeforeYuan": 0,
+        "localBeforeYuan": 0,
+        "releasedReserveYuan": 100000000,
+        "newPayableYuan": 100000000,
+        "settleYuan": 0
+      },
+      "expected": {
+        "settledAfterYuan": 300000000,
+        "platformAfterYuan": 200000000,
+        "payableAfterYuan": 100000000,
+        "availableAfterYuan": 0,
+        "result": "known"
+      }
+    },
+    {
+      "caseId": "M02",
+      "title": "应付比原保留多1000元须如实缺口",
+      "kind": "cash_migration",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-OCC-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "settledBeforeYuan": 300000000,
+        "platformBeforeYuan": 300000000,
+        "payableBeforeYuan": 0,
+        "localBeforeYuan": 0,
+        "releasedReserveYuan": 100000000,
+        "newPayableYuan": 100001000,
+        "settleYuan": 0
+      },
+      "expected": {
+        "settledAfterYuan": 300000000,
+        "platformAfterYuan": 200000000,
+        "payableAfterYuan": 100001000,
+        "availableAfterYuan": -1000,
+        "result": "known"
+      }
+    },
+    {
+      "caseId": "M03",
+      "title": "成交并结算同步减账面和应付",
+      "kind": "cash_migration",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-OCC-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "settledBeforeYuan": 300000000,
+        "platformBeforeYuan": 300000000,
+        "payableBeforeYuan": 0,
+        "localBeforeYuan": 0,
+        "releasedReserveYuan": 100000000,
+        "newPayableYuan": 100000000,
+        "settleYuan": 100000000
+      },
+      "expected": {
+        "settledAfterYuan": 200000000,
+        "platformAfterYuan": 200000000,
+        "payableAfterYuan": 0,
+        "availableAfterYuan": 0,
+        "result": "known"
+      }
+    },
+    {
+      "caseId": "M04",
+      "title": "实际应付未知保留原占用待核",
+      "kind": "cash_migration",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-OCC-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "settledBeforeYuan": 300000000,
+        "platformBeforeYuan": 300000000,
+        "payableBeforeYuan": 0,
+        "localBeforeYuan": 0,
+        "releasedReserveYuan": 100000000,
+        "newPayableYuan": null,
+        "settleYuan": 0
+      },
+      "expected": {
+        "settledAfterYuan": 300000000,
+        "platformAfterYuan": 300000000,
+        "payableAfterYuan": 0,
+        "availableAfterYuan": 0,
+        "result": "reconcile_required"
+      }
+    },
+    {
+      "caseId": "S01",
+      "title": "10亿目标先建议3亿后保留7亿",
+      "kind": "split_amount",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-TARGET-01"
+      ],
+      "assumptions": [
+        "仅为待审核候选金额上限；未发送不产生事实锁；演示100万元最小单位非正式"
+      ],
+      "input": {
+        "targetYuan": 1000000000,
+        "filledYuan": 0,
+        "lockedYuan": 0,
+        "availableYuan": 300000000,
+        "feeYuan": 0,
+        "bufferYuan": 0,
+        "unitYuan": 1000000
+      },
+      "expected": {
+        "arrangeableYuan": 1000000000,
+        "proposedNowYuan": 300000000,
+        "unarrangedAfterProposalYuan": 700000000,
+        "result": "proposed",
+        "targetRetainedYuan": 1000000000
+      }
+    },
+    {
+      "caseId": "S02",
+      "title": "已有3亿锁定不可再次排入",
+      "kind": "split_amount",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-TARGET-01"
+      ],
+      "assumptions": [
+        "仅为待审核候选金额上限；未发送不产生事实锁；演示100万元最小单位非正式"
+      ],
+      "input": {
+        "targetYuan": 1000000000,
+        "filledYuan": 0,
+        "lockedYuan": 300000000,
+        "availableYuan": 0,
+        "feeYuan": 0,
+        "bufferYuan": 0,
+        "unitYuan": 1000000
+      },
+      "expected": {
+        "arrangeableYuan": 700000000,
+        "proposedNowYuan": 0,
+        "unarrangedAfterProposalYuan": 700000000,
+        "result": "waiting",
+        "targetRetainedYuan": 1000000000
+      }
+    },
+    {
+      "caseId": "S03",
+      "title": "单位不整除目标不能丢弃余量",
+      "kind": "split_amount",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-TARGET-01"
+      ],
+      "assumptions": [
+        "仅为待审核候选金额上限；未发送不产生事实锁；演示100万元最小单位非正式"
+      ],
+      "input": {
+        "targetYuan": 1000500000,
+        "filledYuan": 0,
+        "lockedYuan": 0,
+        "availableYuan": 300000000,
+        "feeYuan": 0,
+        "bufferYuan": 0,
+        "unitYuan": 1000000
+      },
+      "expected": {
+        "arrangeableYuan": 1000500000,
+        "proposedNowYuan": null,
+        "unarrangedAfterProposalYuan": null,
+        "result": "unit_conflict",
+        "targetRetainedYuan": 1000500000
+      }
+    },
+    {
+      "caseId": "S04",
+      "title": "未知费用不能计算本次金额",
+      "kind": "split_amount",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-TARGET-01",
+        "DEMO-MISSING-01"
+      ],
+      "assumptions": [
+        "仅为待审核候选金额上限；未发送不产生事实锁；演示100万元最小单位非正式"
+      ],
+      "input": {
+        "targetYuan": 1000000000,
+        "filledYuan": 0,
+        "lockedYuan": 0,
+        "availableYuan": 300000000,
+        "feeYuan": null,
+        "bufferYuan": 0,
+        "unitYuan": 1000000
+      },
+      "expected": {
+        "arrangeableYuan": 1000000000,
+        "proposedNowYuan": null,
+        "unarrangedAfterProposalYuan": null,
+        "result": "missing",
+        "targetRetainedYuan": 1000000000
+      }
+    },
+    {
+      "caseId": "S05",
+      "title": "费用及缓冲后向下对齐交易单位",
+      "kind": "split_amount",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-TARGET-01"
+      ],
+      "assumptions": [
+        "仅为待审核候选金额上限；未发送不产生事实锁；演示100万元最小单位非正式"
+      ],
+      "input": {
+        "targetYuan": 1000000000,
+        "filledYuan": 0,
+        "lockedYuan": 0,
+        "availableYuan": 300500000,
+        "feeYuan": 100000,
+        "bufferYuan": 1000000,
+        "unitYuan": 1000000
+      },
+      "expected": {
+        "arrangeableYuan": 1000000000,
+        "proposedNowYuan": 299000000,
+        "unarrangedAfterProposalYuan": 701000000,
+        "result": "proposed",
+        "targetRetainedYuan": 1000000000
+      }
+    },
+    {
+      "caseId": "E01",
+      "title": "卖券成交不满足到账依赖",
+      "kind": "event_dependency",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-PATH-01",
+        "DEMO-VERSION-01",
+        "DEMO-CASH-03"
+      ],
+      "assumptions": [],
+      "input": {
+        "requiredKind": "cash_available",
+        "requiredYuan": 200000000,
+        "observedKind": "fill",
+        "observedYuan": 200000000,
+        "sameReference": true,
+        "ruleResult": "pass",
+        "approvalCovers": true
+      },
+      "expected": {
+        "conditionMet": false,
+        "manualDispatchRequired": true,
+        "dispatchGate": "waiting_conditions"
+      }
+    },
+    {
+      "caseId": "E02",
+      "title": "卖券结算但未可用仍等待",
+      "kind": "event_dependency",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-PATH-01",
+        "DEMO-VERSION-01",
+        "DEMO-CASH-03"
+      ],
+      "assumptions": [],
+      "input": {
+        "requiredKind": "cash_available",
+        "requiredYuan": 200000000,
+        "observedKind": "cash_settled",
+        "observedYuan": 200000000,
+        "sameReference": true,
+        "ruleResult": "pass",
+        "approvalCovers": true
+      },
+      "expected": {
+        "conditionMet": false,
+        "manualDispatchRequired": true,
+        "dispatchGate": "waiting_conditions"
+      }
+    },
+    {
+      "caseId": "E03",
+      "title": "同一资金流确认可用后仍手动下达",
+      "kind": "event_dependency",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-PATH-01",
+        "DEMO-VERSION-01",
+        "DEMO-CASH-03"
+      ],
+      "assumptions": [],
+      "input": {
+        "requiredKind": "cash_available",
+        "requiredYuan": 200000000,
+        "observedKind": "cash_available",
+        "observedYuan": 200000000,
+        "sameReference": true,
+        "ruleResult": "pass",
+        "approvalCovers": true
+      },
+      "expected": {
+        "conditionMet": true,
+        "manualDispatchRequired": true,
+        "dispatchGate": "eligible_for_manual"
+      }
+    },
+    {
+      "caseId": "E04",
+      "title": "错误资金流不得兑现条件",
+      "kind": "event_dependency",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-PATH-01",
+        "DEMO-VERSION-01",
+        "DEMO-CASH-03"
+      ],
+      "assumptions": [],
+      "input": {
+        "requiredKind": "cash_available",
+        "requiredYuan": 200000000,
+        "observedKind": "cash_available",
+        "observedYuan": 200000000,
+        "sameReference": false,
+        "ruleResult": "pass",
+        "approvalCovers": true
+      },
+      "expected": {
+        "conditionMet": false,
+        "manualDispatchRequired": true,
+        "dispatchGate": "waiting_conditions"
+      }
+    },
+    {
+      "caseId": "E05",
+      "title": "融资额度不是到账",
+      "kind": "event_dependency",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-PATH-01",
+        "DEMO-VERSION-01",
+        "DEMO-CASH-02"
+      ],
+      "assumptions": [],
+      "input": {
+        "requiredKind": "cash_available",
+        "requiredYuan": 200000000,
+        "observedKind": "funding_limit",
+        "observedYuan": 200000000,
+        "sameReference": true,
+        "ruleResult": "pass",
+        "approvalCovers": true
+      },
+      "expected": {
+        "conditionMet": false,
+        "manualDispatchRequired": true,
+        "dispatchGate": "waiting_conditions"
+      }
+    },
+    {
+      "caseId": "E06",
+      "title": "到账满足但新增未接受风险需重审",
+      "kind": "event_dependency",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-PATH-01",
+        "DEMO-VERSION-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "requiredKind": "cash_available",
+        "requiredYuan": 200000000,
+        "observedKind": "cash_available",
+        "observedYuan": 200000000,
+        "sameReference": true,
+        "ruleResult": "pass",
+        "approvalCovers": false
+      },
+      "expected": {
+        "conditionMet": true,
+        "manualDispatchRequired": true,
+        "dispatchGate": "reapprove"
+      }
+    },
+    {
+      "caseId": "E07",
+      "title": "审核不能越过新硬阻断",
+      "kind": "event_dependency",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-PATH-01",
+        "DEMO-VERSION-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "requiredKind": "cash_available",
+        "requiredYuan": 200000000,
+        "observedKind": "cash_available",
+        "observedYuan": 200000000,
+        "sameReference": true,
+        "ruleResult": "block",
+        "approvalCovers": true
+      },
+      "expected": {
+        "conditionMet": true,
+        "manualDispatchRequired": true,
+        "dispatchGate": "hard_block"
+      }
+    },
+    {
+      "caseId": "E08",
+      "title": "已接受不等于已成交",
+      "kind": "event_dependency",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-PATH-01",
+        "DEMO-VERSION-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "requiredKind": "instruction_filled",
+        "requiredYuan": 200000000,
+        "observedKind": "accepted",
+        "observedYuan": 200000000,
+        "sameReference": true,
+        "ruleResult": "pass",
+        "approvalCovers": true
+      },
+      "expected": {
+        "conditionMet": false,
+        "manualDispatchRequired": true,
+        "dispatchGate": "waiting_conditions"
+      }
+    },
+    {
+      "caseId": "E09",
+      "title": "仅5亿不能兑现已审7亿条件",
+      "kind": "event_dependency",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-PATH-01",
+        "DEMO-VERSION-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "requiredKind": "cash_available",
+        "requiredYuan": 700000000,
+        "observedKind": "cash_available",
+        "observedYuan": 500000000,
+        "sameReference": true,
+        "ruleResult": "pass",
+        "approvalCovers": true
+      },
+      "expected": {
+        "conditionMet": false,
+        "manualDispatchRequired": true,
+        "dispatchGate": "waiting_conditions"
+      }
+    },
+    {
+      "caseId": "R01",
+      "title": "默认先资金时点安全再预警",
+      "kind": "ranking",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-PREFERENCE-01"
+      ],
+      "assumptions": [
+        "独立排序合成评分，并非原S13所有规则的评分",
+        "当前正式指标余量未提供，headroomYuan=null；整批统一跳过该偏好并明示，不把软观察线余量当硬限额"
+      ],
+      "input": {
+        "priority": [],
+        "candidates": [
+          {
+            "candidateId": "A",
+            "hardPass": true,
+            "completeTarget": true,
+            "inputsComplete": true,
+            "peakFundingYuan": 800000000,
+            "warningsNew": 1,
+            "headroomYuan": null,
+            "comparisonGroupId": "SYNTH-COMMON-CONDITIONS",
+            "executionClass": "conditional"
+          },
+          {
+            "candidateId": "C",
+            "hardPass": true,
+            "completeTarget": true,
+            "inputsComplete": true,
+            "peakFundingYuan": 1000000000,
+            "warningsNew": 0,
+            "headroomYuan": null,
+            "comparisonGroupId": "SYNTH-COMMON-CONDITIONS",
+            "executionClass": "conditional"
+          },
+          {
+            "candidateId": "B",
+            "hardPass": false,
+            "completeTarget": false,
+            "inputsComplete": true,
+            "peakFundingYuan": 0,
+            "warningsNew": 0,
+            "headroomYuan": null,
+            "comparisonGroupId": "SYNTH-COMMON-CONDITIONS",
+            "executionClass": "conditional"
+          }
+        ],
+        "comparisonGroupId": "SYNTH-COMMON-CONDITIONS",
+        "executionClass": "conditional"
+      },
+      "expected": {
+        "eligibleIds": [
+          "A",
+          "C"
+        ],
+        "rankedIds": [
+          "A",
+          "C"
+        ],
+        "reason": "字典序先较小峰值；B硬失败/目标不完整排除",
+        "excludedPreferenceKeys": [
+          "metric_headroom"
+        ]
+      }
+    },
+    {
+      "caseId": "R02",
+      "title": "经理明确偏好预警优先但不越硬控",
+      "kind": "ranking",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-PREFERENCE-01"
+      ],
+      "assumptions": [
+        "独立排序合成评分，资金安全硬门槛始终在偏好之前",
+        "当前正式指标余量未提供，headroomYuan=null；整批统一跳过该偏好并明示，不把软观察线余量当硬限额"
+      ],
+      "input": {
+        "priority": [
+          "fewer_warnings",
+          "settlement_safety",
+          "metric_headroom"
+        ],
+        "candidates": [
+          {
+            "candidateId": "A",
+            "hardPass": true,
+            "completeTarget": true,
+            "inputsComplete": true,
+            "peakFundingYuan": 800000000,
+            "warningsNew": 1,
+            "headroomYuan": null,
+            "comparisonGroupId": "SYNTH-COMMON-CONDITIONS",
+            "executionClass": "conditional"
+          },
+          {
+            "candidateId": "C",
+            "hardPass": true,
+            "completeTarget": true,
+            "inputsComplete": true,
+            "peakFundingYuan": 1000000000,
+            "warningsNew": 0,
+            "headroomYuan": null,
+            "comparisonGroupId": "SYNTH-COMMON-CONDITIONS",
+            "executionClass": "conditional"
+          },
+          {
+            "candidateId": "B",
+            "hardPass": false,
+            "completeTarget": false,
+            "inputsComplete": true,
+            "peakFundingYuan": 0,
+            "warningsNew": 0,
+            "headroomYuan": null,
+            "comparisonGroupId": "SYNTH-COMMON-CONDITIONS",
+            "executionClass": "conditional"
+          }
+        ],
+        "comparisonGroupId": "SYNTH-COMMON-CONDITIONS",
+        "executionClass": "conditional"
+      },
+      "expected": {
+        "eligibleIds": [
+          "A",
+          "C"
+        ],
+        "rankedIds": [
+          "C",
+          "A"
+        ],
+        "reason": "两个硬约束可行候选按用户首优先预警数比较；B仍排除",
+        "excludedPreferenceKeys": [
+          "metric_headroom"
+        ]
+      }
+    },
+    {
+      "caseId": "R03",
+      "title": "同分按稳定候选ID排序",
+      "kind": "ranking",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-PREFERENCE-01"
+      ],
+      "assumptions": [
+        "当前正式指标余量未提供，headroomYuan=null；整批统一跳过该偏好并明示，不把软观察线余量当硬限额"
+      ],
+      "input": {
+        "priority": [],
+        "candidates": [
+          {
+            "candidateId": "Z",
+            "hardPass": true,
+            "completeTarget": true,
+            "inputsComplete": true,
+            "peakFundingYuan": 800000000,
+            "warningsNew": 1,
+            "headroomYuan": null,
+            "comparisonGroupId": "SYNTH-COMMON-CONDITIONS",
+            "executionClass": "conditional"
+          },
+          {
+            "candidateId": "A",
+            "hardPass": true,
+            "completeTarget": true,
+            "inputsComplete": true,
+            "peakFundingYuan": 800000000,
+            "warningsNew": 1,
+            "headroomYuan": null,
+            "comparisonGroupId": "SYNTH-COMMON-CONDITIONS",
+            "executionClass": "conditional"
+          }
+        ],
+        "comparisonGroupId": "SYNTH-COMMON-CONDITIONS",
+        "executionClass": "conditional"
+      },
+      "expected": {
+        "eligibleIds": [
+          "A",
+          "Z"
+        ],
+        "rankedIds": [
+          "A",
+          "Z"
+        ],
+        "reason": "全部评分相同，用候选ID字典序，不靠输入顺序",
+        "excludedPreferenceKeys": [
+          "metric_headroom"
+        ]
+      }
+    },
+    {
+      "caseId": "Q01",
+      "title": "只试到失败B不能称全局不可行",
+      "kind": "search_classification",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-SEARCH-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "inputsComplete": true,
+        "fullFeasibleFound": false,
+        "externalConditionsUnmet": false,
+        "mathematicalConflict": false,
+        "exhaustiveFiniteDomain": false,
+        "searched": 1,
+        "totalCandidates": 120,
+        "proof": {
+          "kind": "none",
+          "scopeKey": null,
+          "initialYuan": null,
+          "maximumInflowYuan": null,
+          "outflowTargetYuan": null,
+          "domainOrderCount": null
+        }
+      },
+      "expected": {
+        "status": "search_exhausted",
+        "proofScope": "只检查有限顺序前缀，不作全局无解结论"
+      }
+    },
+    {
+      "caseId": "Q02",
+      "title": "所有固定资源不足可以直接证冲突",
+      "kind": "search_classification",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-SEARCH-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "inputsComplete": true,
+        "fullFeasibleFound": false,
+        "externalConditionsUnmet": false,
+        "mathematicalConflict": true,
+        "exhaustiveFiniteDomain": false,
+        "searched": 0,
+        "totalCandidates": 120,
+        "proof": {
+          "kind": "funding_bound",
+          "scopeKey": "S13_WHOLE_NO_OTHER_FUNDING",
+          "initialYuan": 300000000,
+          "maximumInflowYuan": 200000000,
+          "outflowTargetYuan": 1300000000,
+          "domainOrderCount": null
+        }
+      },
+      "expected": {
+        "status": "proven_infeasible",
+        "proofScope": "仅封闭资源假设：3+2<13且不允许其他流入；不证明未来融资不可得"
+      }
+    },
+    {
+      "caseId": "Q03",
+      "title": "A路径仍需外部融资确认",
+      "kind": "search_classification",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-SEARCH-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "inputsComplete": true,
+        "fullFeasibleFound": true,
+        "externalConditionsUnmet": true,
+        "mathematicalConflict": false,
+        "exhaustiveFiniteDomain": false,
+        "searched": 1,
+        "totalCandidates": 120,
+        "proof": {
+          "kind": "none",
+          "scopeKey": null,
+          "initialYuan": null,
+          "maximumInflowYuan": null,
+          "outflowTargetYuan": null,
+          "domainOrderCount": null
+        }
+      },
+      "expected": {
+        "status": "waiting_conditions",
+        "proofScope": "仅假设条件兑现后的完整路径；不是当前可下达"
+      }
+    },
+    {
+      "caseId": "Q04",
+      "title": "关键指标输入缺失优先报缺数",
+      "kind": "search_classification",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-SEARCH-01",
+        "DEMO-MISSING-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "inputsComplete": false,
+        "fullFeasibleFound": false,
+        "externalConditionsUnmet": false,
+        "mathematicalConflict": false,
+        "exhaustiveFiniteDomain": false,
+        "searched": 1,
+        "totalCandidates": 120,
+        "proof": {
+          "kind": "none",
+          "scopeKey": null,
+          "initialYuan": null,
+          "maximumInflowYuan": null,
+          "outflowTargetYuan": null,
+          "domainOrderCount": null
+        }
+      },
+      "expected": {
+        "status": "insufficient_data",
+        "proofScope": "不可将缺数当可行或无解"
+      }
+    },
+    {
+      "caseId": "Q05",
+      "title": "完整当前资源路径已找到",
+      "kind": "search_classification",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-SEARCH-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "inputsComplete": true,
+        "fullFeasibleFound": true,
+        "externalConditionsUnmet": false,
+        "mathematicalConflict": false,
+        "exhaustiveFiniteDomain": false,
+        "searched": 1,
+        "totalCandidates": 120,
+        "proof": {
+          "kind": "none",
+          "scopeKey": null,
+          "initialYuan": null,
+          "maximumInflowYuan": null,
+          "outflowTargetYuan": null,
+          "domainOrderCount": null
+        }
+      },
+      "expected": {
+        "status": "feasible",
+        "proofScope": "只证明指定约束与输入下已找到完整可行路径，不称最优"
+      }
+    },
+    {
+      "caseId": "Q06",
+      "title": "穷尽有限域仍无可行候选",
+      "kind": "search_classification",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-SEARCH-01"
+      ],
+      "assumptions": [],
+      "input": {
+        "inputsComplete": true,
+        "fullFeasibleFound": false,
+        "externalConditionsUnmet": false,
+        "mathematicalConflict": false,
+        "exhaustiveFiniteDomain": true,
+        "searched": 120,
+        "totalCandidates": 120,
+        "proof": {
+          "kind": "fixed_s13_exhaustion",
+          "scopeKey": "S13_WHOLE_NO_OTHER_FUNDING",
+          "initialYuan": 300000000,
+          "maximumInflowYuan": 200000000,
+          "outflowTargetYuan": 1300000000,
+          "domainOrderCount": 120
+        }
+      },
+      "expected": {
+        "status": "proven_infeasible",
+        "proofScope": "仅声明已穷尽的固定顺序域，不覆盖拆单/新融资"
+      }
+    },
+    {
+      "caseId": "X01",
+      "title": "在途存单增量未含于分子须合并",
+      "kind": "effective_exposure",
+      "sourceRef": "docs/规则计算与排序设计.md#在途敞口与去重",
+      "ruleIds": [
+        "DEMO-EXP-01",
+        "DEMO-LINK-01"
+      ],
+      "assumptions": [
+        "仅A银行新增存款的保守下达预检设计，非正式投管集中度制度",
+        "pendingAdds来自已发送/未知/已接受未成交余量；未发送建议不加入；未确认卖出不抵减"
+      ],
+      "input": {
+        "numeratorYuan": 3950000000,
+        "navYuan": 50000000000,
+        "basis": "confirmed_only",
+        "pendingAdds": [
+          {
+            "instructionId": "I-CD",
+            "unfilledExposureYuan": 100000000,
+            "asOfSequence": 10
+          }
+        ],
+        "snapshotSequence": 10,
+        "includedPendingExposure": []
+      },
+      "expected": {
+        "effectiveExposureYuan": 4050000000,
+        "result": "block"
+      }
+    },
+    {
+      "caseId": "X02",
+      "title": "分子已含同一在途存单不能再加",
+      "kind": "effective_exposure",
+      "sourceRef": "docs/规则计算与排序设计.md#在途敞口与去重",
+      "ruleIds": [
+        "DEMO-EXP-01",
+        "DEMO-LINK-01"
+      ],
+      "assumptions": [
+        "仅A银行新增存款的保守下达预检设计，非正式投管集中度制度",
+        "pendingAdds来自已发送/未知/已接受未成交余量；未发送建议不加入；未确认卖出不抵减"
+      ],
+      "input": {
+        "numeratorYuan": 4050000000,
+        "navYuan": 50000000000,
+        "basis": "includes_listed",
+        "pendingAdds": [
+          {
+            "instructionId": "I-CD",
+            "unfilledExposureYuan": 100000000,
+            "asOfSequence": 10
+          }
+        ],
+        "snapshotSequence": 10,
+        "includedPendingExposure": [
+          {
+            "instructionId": "I-CD",
+            "includedUnfilledExposureYuan": 100000000
+          }
+        ]
+      },
+      "expected": {
+        "effectiveExposureYuan": 4050000000,
+        "result": "block"
+      }
+    },
+    {
+      "caseId": "X03",
+      "title": "分子含在途口径未知不能猜测",
+      "kind": "effective_exposure",
+      "sourceRef": "docs/规则计算与排序设计.md#在途敞口与去重",
+      "ruleIds": [
+        "DEMO-EXP-01",
+        "DEMO-LINK-01"
+      ],
+      "assumptions": [
+        "仅A银行新增存款的保守下达预检设计，非正式投管集中度制度",
+        "pendingAdds来自已发送/未知/已接受未成交余量；未发送建议不加入；未确认卖出不抵减"
+      ],
+      "input": {
+        "numeratorYuan": 3950000000,
+        "navYuan": 50000000000,
+        "basis": "unknown",
+        "pendingAdds": [
+          {
+            "instructionId": "I-CD",
+            "unfilledExposureYuan": 100000000,
+            "asOfSequence": 10
+          }
+        ],
+        "snapshotSequence": 10,
+        "includedPendingExposure": []
+      },
+      "expected": {
+        "effectiveExposureYuan": null,
+        "result": "missing"
+      }
+    },
+    {
+      "caseId": "X04",
+      "title": "在途敞口金额未知保持待核",
+      "kind": "effective_exposure",
+      "sourceRef": "docs/规则计算与排序设计.md#在途敞口与去重",
+      "ruleIds": [
+        "DEMO-EXP-01",
+        "DEMO-LINK-01"
+      ],
+      "assumptions": [
+        "仅A银行新增存款的保守下达预检设计，非正式投管集中度制度",
+        "pendingAdds来自已发送/未知/已接受未成交余量；未发送建议不加入；未确认卖出不抵减"
+      ],
+      "input": {
+        "numeratorYuan": 3950000000,
+        "navYuan": 50000000000,
+        "basis": "confirmed_only",
+        "pendingAdds": [
+          {
+            "instructionId": "I-CD",
+            "unfilledExposureYuan": null,
+            "asOfSequence": 10
+          }
+        ],
+        "snapshotSequence": 10,
+        "includedPendingExposure": []
+      },
+      "expected": {
+        "effectiveExposureYuan": null,
+        "result": "missing"
+      }
+    },
+    {
+      "caseId": "X05",
+      "title": "确认撤销释放后才移除在途增量",
+      "kind": "effective_exposure",
+      "sourceRef": "docs/规则计算与排序设计.md#在途敞口与去重",
+      "ruleIds": [
+        "DEMO-EXP-01",
+        "DEMO-LINK-01"
+      ],
+      "assumptions": [
+        "仅A银行新增存款的保守下达预检设计，非正式投管集中度制度",
+        "pendingAdds来自已发送/未知/已接受未成交余量；未发送建议不加入；未确认卖出不抵减"
+      ],
+      "input": {
+        "numeratorYuan": 3950000000,
+        "navYuan": 50000000000,
+        "basis": "confirmed_only",
+        "pendingAdds": [],
+        "snapshotSequence": 10,
+        "includedPendingExposure": []
+      },
+      "expected": {
+        "effectiveExposureYuan": 3950000000,
+        "result": "pass"
+      }
+    },
+    {
+      "caseId": "D10",
+      "title": "交叉乘积超安全整数仍须精确比较",
+      "kind": "deposit_threshold",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-EXP-01"
+      ],
+      "assumptions": [
+        "金额输入各自不超安全整数；乘积诊断用十进制整数字符串"
+      ],
+      "input": {
+        "action": "deposit",
+        "exposureYuan": 1000000000000000,
+        "navYuan": 9007199254740991,
+        "addExposureYuan": 1
+      },
+      "expected": {
+        "result": "block",
+        "crossProductDelta": "27942405962072072",
+        "actualPostExposureYuan": 1000000000000000
+      }
+    },
+    {
+      "caseId": "R04",
+      "title": "不把不同资金条件或当前可发候选混排",
+      "kind": "ranking",
+      "sourceRef": "docs/规则计算与排序设计.md",
+      "ruleIds": [
+        "DEMO-PREFERENCE-01"
+      ],
+      "assumptions": [
+        "独立排序合成评分，并非原S13所有规则的评分",
+        "当前正式指标余量未提供，headroomYuan=null；整批统一跳过该偏好并明示，不把软观察线余量当硬限额"
+      ],
+      "input": {
+        "priority": [],
+        "candidates": [
+          {
+            "candidateId": "A",
+            "hardPass": true,
+            "completeTarget": true,
+            "inputsComplete": true,
+            "peakFundingYuan": 800000000,
+            "warningsNew": 1,
+            "headroomYuan": null,
+            "comparisonGroupId": "SYNTH-COMMON-CONDITIONS",
+            "executionClass": "conditional"
+          },
+          {
+            "candidateId": "C",
+            "hardPass": true,
+            "completeTarget": true,
+            "inputsComplete": true,
+            "peakFundingYuan": 1000000000,
+            "warningsNew": 0,
+            "headroomYuan": null,
+            "comparisonGroupId": "SYNTH-COMMON-CONDITIONS",
+            "executionClass": "conditional"
+          },
+          {
+            "candidateId": "B",
+            "hardPass": false,
+            "completeTarget": false,
+            "inputsComplete": true,
+            "peakFundingYuan": 0,
+            "warningsNew": 0,
+            "headroomYuan": null,
+            "comparisonGroupId": "SYNTH-COMMON-CONDITIONS",
+            "executionClass": "conditional"
+          },
+          {
+            "candidateId": "OTHER",
+            "hardPass": true,
+            "completeTarget": true,
+            "inputsComplete": true,
+            "peakFundingYuan": 0,
+            "warningsNew": 0,
+            "headroomYuan": null,
+            "comparisonGroupId": "DIFFERENT-FUNDING",
+            "executionClass": "conditional"
+          },
+          {
+            "candidateId": "CURRENT",
+            "hardPass": true,
+            "completeTarget": true,
+            "inputsComplete": true,
+            "peakFundingYuan": 0,
+            "warningsNew": 0,
+            "headroomYuan": null,
+            "comparisonGroupId": "SYNTH-COMMON-CONDITIONS",
+            "executionClass": "current_confirmed"
+          }
+        ],
+        "comparisonGroupId": "SYNTH-COMMON-CONDITIONS",
+        "executionClass": "conditional"
+      },
+      "expected": {
+        "eligibleIds": [
+          "A",
+          "C"
+        ],
+        "rankedIds": [
+          "A",
+          "C"
+        ],
+        "reason": "只对所请求同组同状态候选排序；OTHER/CURRENT另组展示",
+        "excludedPreferenceKeys": [
+          "metric_headroom"
+        ]
+      }
+    },
+    {
+      "caseId": "X06",
+      "title": "部分成交0.4亿仅已成交进入分子",
+      "kind": "effective_exposure",
+      "sourceRef": "docs/规则计算与排序设计.md#在途敞口与去重",
+      "ruleIds": [
+        "DEMO-EXP-01",
+        "DEMO-LINK-01"
+      ],
+      "assumptions": [
+        "仅A银行新增存款的保守下达预检设计，非正式投管集中度制度",
+        "pendingAdds来自已发送/未知/已接受未成交余量；未发送建议不加入；未确认卖出不抵减"
+      ],
+      "input": {
+        "numeratorYuan": 3990000000,
+        "navYuan": 50000000000,
+        "basis": "includes_listed",
+        "pendingAdds": [
+          {
+            "instructionId": "I-CD",
+            "unfilledExposureYuan": 60000000,
+            "asOfSequence": 10
+          }
+        ],
+        "snapshotSequence": 10,
+        "includedPendingExposure": [
+          {
+            "instructionId": "I-CD",
+            "includedUnfilledExposureYuan": 0
+          }
+        ]
+      },
+      "expected": {
+        "effectiveExposureYuan": 4050000000,
+        "result": "block"
+      }
+    },
+    {
+      "caseId": "X07",
+      "title": "剩余0.6亿中仅0.2亿已含分子",
+      "kind": "effective_exposure",
+      "sourceRef": "docs/规则计算与排序设计.md#在途敞口与去重",
+      "ruleIds": [
+        "DEMO-EXP-01",
+        "DEMO-LINK-01"
+      ],
+      "assumptions": [
+        "仅A银行新增存款的保守下达预检设计，非正式投管集中度制度",
+        "pendingAdds来自已发送/未知/已接受未成交余量；未发送建议不加入；未确认卖出不抵减"
+      ],
+      "input": {
+        "numeratorYuan": 4010000000,
+        "navYuan": 50000000000,
+        "basis": "includes_listed",
+        "pendingAdds": [
+          {
+            "instructionId": "I-CD",
+            "unfilledExposureYuan": 60000000,
+            "asOfSequence": 10
+          }
+        ],
+        "snapshotSequence": 10,
+        "includedPendingExposure": [
+          {
+            "instructionId": "I-CD",
+            "includedUnfilledExposureYuan": 20000000
+          }
+        ]
+      },
+      "expected": {
+        "effectiveExposureYuan": 4050000000,
+        "result": "block"
+      }
+    },
+    {
+      "caseId": "X08",
+      "title": "分子与在途水位不一致待核",
+      "kind": "effective_exposure",
+      "sourceRef": "docs/规则计算与排序设计.md#在途敞口与去重",
+      "ruleIds": [
+        "DEMO-EXP-01",
+        "DEMO-LINK-01"
+      ],
+      "assumptions": [
+        "仅A银行新增存款的保守下达预检设计，非正式投管集中度制度",
+        "pendingAdds来自已发送/未知/已接受未成交余量；未发送建议不加入；未确认卖出不抵减"
+      ],
+      "input": {
+        "numeratorYuan": 3990000000,
+        "navYuan": 50000000000,
+        "basis": "includes_listed",
+        "pendingAdds": [
+          {
+            "instructionId": "I-CD",
+            "unfilledExposureYuan": 60000000,
+            "asOfSequence": 9
+          }
+        ],
+        "snapshotSequence": 10,
+        "includedPendingExposure": [
+          {
+            "instructionId": "I-CD",
+            "includedUnfilledExposureYuan": 0
+          }
+        ]
+      },
+      "expected": {
+        "effectiveExposureYuan": null,
+        "result": "missing"
+      }
+    },
+    {
+      "caseId": "X09",
+      "title": "释放已确认的0.3亿后只保留剩余0.3亿",
+      "kind": "effective_exposure",
+      "sourceRef": "docs/规则计算与排序设计.md#在途敞口与去重",
+      "ruleIds": [
+        "DEMO-EXP-01",
+        "DEMO-LINK-01"
+      ],
+      "assumptions": [
+        "仅A银行新增存款的保守下达预检设计，非正式投管集中度制度",
+        "pendingAdds来自已发送/未知/已接受未成交余量；未发送建议不加入；未确认卖出不抵减"
+      ],
+      "input": {
+        "numeratorYuan": 3990000000,
+        "navYuan": 50000000000,
+        "basis": "includes_listed",
+        "pendingAdds": [
+          {
+            "instructionId": "I-CD",
+            "unfilledExposureYuan": 30000000,
+            "asOfSequence": 10
+          }
+        ],
+        "snapshotSequence": 10,
+        "includedPendingExposure": [
+          {
+            "instructionId": "I-CD",
+            "includedUnfilledExposureYuan": 0
+          }
+        ]
+      },
+      "expected": {
+        "effectiveExposureYuan": 4020000000,
+        "result": "block"
+      }
+    }
+  ]
+}

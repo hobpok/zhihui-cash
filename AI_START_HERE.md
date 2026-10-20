@@ -1,0 +1,44 @@
+# 给评审 AI 的阅读入口
+
+## 你的任务
+
+先理解，再提出修改意见。默认只读；没有人的明确开发要求，不改文件、不运行部署、不接入真实账户、不调用收费模型。反馈直接输出给同事，由同事转交负责人，不要求 GitHub 账号。
+
+## 十分钟阅读顺序
+
+1. [README](README.md)：项目目的、版本与运行边界。
+2. [业务流程与指标](docs/业务流程与指标.md)：现行流程、样例与口径。
+3. [数据与公开范围](docs/数据与公开范围.md)：区分初始演示、规则与历史指标目录。
+4. 根据问题选择下表对应源码和同名测试，不必一次读遍所有文件。
+5. 阅读[验证记录](docs/验证记录.md)，按[反馈模板](docs/反馈模板.md)给意见。
+
+## 当前状态
+
+应用版本与版本初始化标记均为 **6-0.28.0**。默认是公司级三项银行约束六笔计划，另一套为原始零现金九笔计划。数据切换保留旧运行历史。云端版本初始化逻辑保留在后端源码供理解；本地静态预览只使用浏览器存储，不会进入生产账户。旧浏览器已有数据时，不会仅因刷新就迁移模板。
+
+本仓库是经过整理的公开快照。历史资料、生产运行记录与原始附件不在这里；缺少它们不意味着需要编造数据、重建账号或重复发布。后续同步由负责人审核后进行，不能假设它实时等同正在开发的目录。
+
+## 按问题找代码
+
+| 想了解什么 | 入口 |
+|---|---|
+| 默认六笔及旧九笔样例 | [default-scenario.js](app/default-scenario.js)、[original-scenario.js](app/original-scenario.js)、对应 `.test.js` |
+| 初始数据格式、金额单位与模板切换 | [initial-data.js](app/initial-data.js)、[initial-ui.js](app/initial-ui.js)、[initial-ui-presets.test.js](app/initial-ui-presets.test.js) |
+| 现金、敞口、期限的规则结果 | [core-rules.js](app/core-rules.js)、[core-rules.test.js](app/core-rules.test.js) |
+| 计划排序、批次计算、可执行容量 | [engine.js](app/engine.js)、[calculation-controller.js](app/calculation-controller.js)、[planning-solver.js](app/planning-solver.js) |
+| 下达、成交、结算、撤改与占用 | [model.js](app/model.js)、[execution.js](app/execution.js)、[business.js](app/business.js) |
+| 工作台操作与诊断解释 | [ui.js](app/ui.js)、[c-ui.js](app/c-ui.js)、[readiness-diagnostics.js](app/readiness-diagnostics.js) |
+| 指标目录和只读分析 | [analysis.js](app/analysis.js)、[metric-catalog.js](app/metric-catalog.js) |
+| AI 候选、流式结果与人工确认 | [ai-conversation.js](app/ai-conversation.js)、[ai-draft.js](app/ai-draft.js)、[ai-dialogue.js](server/ai-dialogue.js)、[ai-service.js](server/ai-service.js) |
+| 云存档、认证、版本初始化的设计 | [api.js](server/api.js)、[storage.js](server/storage.js)、[migrations](migrations)；未提供部署配置与账户 |
+
+## 提意见时注意
+
+- 重点评审计划→计算→下达→模拟成交／收付→重新计算的完整路径，不要只讨论单个按钮。
+- 业务实时头寸和账户现金是不同口径；“可下达”不代表“已经成交／已到账”。
+- 新增存款的公司级6%／批准8%门槛，与本基金无托管资格银行5%限额独立；不要重新引入错误的本基金8%规则。
+- 121项分析目录（10项已有配置、111项待补数据）与102项历史指标名称不是同一集合，也不是223条完整风控规则。
+- 规则阈值是本项目当前模拟合同，不凭名称认定为适用于所有基金的现行监管要求。讨论制度变更须另列待确认依据。
+- AI 输出先是建议或临时预览，最终验证通过的候选仍需人确认、计算和复核才能进入下达流程。
+- 测试 fixture 和旧设计图用于回归或设计解释，不覆盖当前默认样例。对冲突标注文件与版本。
+- 优先给3至5项有依据、可验收的建议；明确“已经实现”“本次测试覆盖”“仍需验证”，不要把猜测写成故障。

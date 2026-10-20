@@ -1,0 +1,45 @@
+{
+  "explanationId": "EXPL-S13-A-MANUAL",
+  "context": {
+    "scenarioId": "S13",
+    "runId": "S13-design-only",
+    "portfolioId": "DEMO-500",
+    "businessDate": "2026-09-07"
+  },
+  "snapshotVersion": "S13-OPEN-v1",
+  "planVersions": [
+    "P13-v1"
+  ],
+  "rulesVersion": "2B-0.1.0",
+  "preferencesVersion": "PREF-v1",
+  "proposalId": "PROP-S13-A",
+  "proposalVersion": "manual-v1",
+  "origin": "manual_expected",
+  "checkIds": [
+    "F04",
+    "D01",
+    "D02",
+    "W03"
+  ],
+  "uncompletedPlanIds": [
+    "P-REPO",
+    "P-DEP",
+    "P-CD",
+    "P-BOND",
+    "P-SELL"
+  ],
+  "conditionIds": [
+    "SALE-CASH-AVAILABLE",
+    "EXTERNAL-800M-AVAILABLE"
+  ],
+  "searchStatus": "waiting_conditions",
+  "proofScope": "S13完整整笔路径A，零费用/安全垫、固定NAV，单条演示存款规则；缺口计算不证明外部融资可得，也未穷尽分次候选",
+  "assumptions": [
+    "卖券2亿达可用后才加入投影",
+    "A银行存款成交后再安排存单",
+    "逆回购全额10亿前另需8亿确认可用",
+    "本例其他参数和正式指标未核验，不构成当前可发建议"
+  ],
+  "summary": "路径A的未融资终局与峰值缺口均8亿元；存款先于存单避免该条存款禁令，投后8.3%触发独立软预警。所有计划目标保留，等待资金条件且仍需经理手动下达。",
+  "authorizesDispatch": false
+}

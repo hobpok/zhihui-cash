@@ -1,0 +1,20 @@
+{
+  "name": "zhihui-cash-simulator",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "start": "npm run build:cloudflare && node scripts/preview.mjs",
+    "check:share": "node scripts/check_share_safety.mjs",
+    "test:collaboration": "node --test scripts/collaboration.test.mjs",
+    "test": "node --test app/*.test.js server/*.test.js",
+    "build:cloudflare": "node scripts/build_cloudflare.mjs",
+    "test:app": "node --test app/*.test.js",
+    "test:server": "node --test server/*.test.js"
+  },
+  "dependencies": {
+    "jose": "6.2.12"
+  }
+}

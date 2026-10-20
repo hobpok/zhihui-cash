@@ -1,0 +1,24 @@
+/* Batch modal frame: only the middle content scrolls. Header and footer are opaque siblings. */
+#batch-scroll-content:focus-visible{outline:2px solid #28699a;outline-offset:-2px}
+html:has(#dialog[open] #batch-form),body:has(#dialog[open] #batch-form){overflow:hidden}
+#dialog:has(#batch-form)[open]{display:flex;flex-direction:column;height:min(85dvh,850px);max-height:calc(100dvh - 24px);overflow:hidden}
+#dialog:has(#batch-form)>.dialog-head{position:static;flex:0 0 auto;z-index:auto}
+#dialog:has(#batch-form)>#dialog-body{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;max-height:none;overflow:hidden;padding:0}
+#batch-form{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;margin:0;overflow:hidden}
+#batch-form>.batch-sticky-summary,#batch-form>.batch-sticky-footer{position:static;flex:0 0 auto;margin:0;background:#fff;isolation:isolate}
+#batch-form>.batch-sticky-summary{display:grid;gap:5px;padding:10px 16px;background:#fffdf8;border-bottom:1px solid #d6c6a9}
+#batch-form .batch-summary-metrics,#batch-form .batch-summary-status,#batch-form .batch-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px}
+#batch-form .batch-summary-metrics{font-variant-numeric:tabular-nums}#batch-form .batch-summary-metrics strong{color:#715018;font-size:15px}#batch-form .batch-summary-metrics span{font-weight:600}
+#batch-form .batch-summary-status{font-size:12px;color:#52616e;line-height:1.5}#batch-form .batch-summary-status span{overflow-wrap:anywhere}
+#batch-scroll-content{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;padding:12px 16px;scroll-padding-block:12px;background:#fff}
+#batch-form .batch-toolbar{gap:6px;margin-bottom:8px}#batch-form .batch-toolbar button{white-space:normal;text-align:left}
+#batch-form .batch-options{max-height:none;overflow:visible}
+#batch-form>.batch-sticky-footer{padding:9px 16px 12px;border-top:1px solid #d6c6a9}
+#batch-form .batch-sticky-footer .checkline{margin:0 0 4px;font-size:12px;line-height:1.45}#batch-form .batch-sticky-footer .batch-submit-reason{margin:3px 0;color:#69552f;font-size:12px;line-height:1.35}
+#batch-form .batch-sticky-footer .form-error{min-height:0;margin:0}#batch-form .batch-sticky-footer .dialog-actions{margin-top:4px;padding-top:0;border-top:0}#batch-form .batch-sticky-footer .dialog-actions button{min-height:36px}
+@media(max-width:650px){#dialog:has(#batch-form)[open]{max-width:96vw;height:85dvh}#batch-form>.batch-sticky-summary{padding:8px 10px;gap:3px}#batch-scroll-content{padding:10px}#batch-form .batch-summary-metrics{gap:2px 9px;font-size:12px}#batch-form .batch-summary-metrics strong{font-size:13px}#batch-form .batch-summary-status{gap:2px 8px;font-size:12px}#batch-form .batch-toolbar{display:grid;grid-template-columns:1fr 1fr}#batch-form .batch-toolbar button{font-size:12px;padding:7px 5px}#batch-form>.batch-sticky-footer{padding:7px 10px 10px}#batch-form .batch-sticky-footer .checkline{font-size:12px}#batch-form .batch-sticky-footer .dialog-actions button{width:100%}}
+
+/* Checked rows retain a readable, persistent selection cue. */
+#batch-form .batch-option:has(.batch-select input:checked){background:var(--gold-soft);border-color:#b18a48;box-shadow:inset 3px 0 #b18a48}
+#batch-form .batch-option:has(.batch-select input:focus-visible){outline:2px solid var(--blue);outline-offset:1px}
+#batch-form .batch-sticky-footer .batch-submit-reason{font-size:12px;line-height:1.5;color:var(--amber)}

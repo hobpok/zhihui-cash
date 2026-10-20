@@ -1,0 +1,1975 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:zhihui-cash:calculation:2B-0.1.0",
+  "title": "2B独立计算用例与规则设计",
+  "$ref": "#/$defs/CaseBook",
+  "$defs": {
+    "Rule": {
+      "type": "object",
+      "properties": {
+        "ruleId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "const": "2B-0.1.0"
+        },
+        "legacyIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "category": {
+          "enum": [
+            "calculation",
+            "hard_gate",
+            "warning",
+            "protocol"
+          ]
+        },
+        "sourceClass": {
+          "enum": [
+            "documented_demo",
+            "synthetic_demo",
+            "design_inference"
+          ]
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "appliesTo": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "evaluationPoints": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "inputPaths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "formula": {
+          "type": "string",
+          "minLength": 1
+        },
+        "comparison": {
+          "type": "string",
+          "minLength": 1
+        },
+        "threshold": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{1,12}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "missingPolicy": {
+          "const": "block_dependent_only"
+        },
+        "effect": {
+          "type": "string",
+          "minLength": 1
+        },
+        "formalConfirmed": {
+          "const": false
+        },
+        "implementation": {
+          "const": "design_only"
+        }
+      },
+      "required": [
+        "ruleId",
+        "version",
+        "legacyIds",
+        "name",
+        "category",
+        "sourceClass",
+        "sourceRef",
+        "appliesTo",
+        "evaluationPoints",
+        "inputPaths",
+        "formula",
+        "comparison",
+        "threshold",
+        "unit",
+        "missingPolicy",
+        "effect",
+        "formalConfirmed",
+        "implementation"
+      ],
+      "additionalProperties": false
+    },
+    "Metric": {
+      "type": "object",
+      "properties": {
+        "metricId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inputPaths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "formula": {
+          "type": "string",
+          "minLength": 1
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rounding": {
+          "type": "string",
+          "minLength": 1
+        },
+        "observedAt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "update": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provenance": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "metricId",
+        "name",
+        "inputPaths",
+        "formula",
+        "unit",
+        "rounding",
+        "observedAt",
+        "update",
+        "provenance"
+      ],
+      "additionalProperties": false
+    },
+    "RuleBook": {
+      "type": "object",
+      "properties": {
+        "calculationVersion": {
+          "const": "2B-0.1.0"
+        },
+        "baseContractVersion": {
+          "const": "2A-0.1.0"
+        },
+        "scope": {
+          "const": "simulation_design"
+        },
+        "metrics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Metric"
+          }
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Rule"
+          }
+        },
+        "pendingFormalInputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "value": {
+                "type": "null"
+              },
+              "blocks": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "value",
+              "blocks"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "calculationVersion",
+        "baseContractVersion",
+        "scope",
+        "metrics",
+        "rules",
+        "pendingFormalInputs",
+        "limitations"
+      ],
+      "additionalProperties": false
+    },
+    "funding": {
+      "type": "object",
+      "properties": {
+        "caseId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "const": "funding"
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ruleIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "input": {
+          "type": "object",
+          "properties": {
+            "initialYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "availableFundingYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "lockedOutflowYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "remainingOutflowYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expectedSaleYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "feeYuan": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "bufferYuan": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "initialYuan",
+            "availableFundingYuan",
+            "lockedOutflowYuan",
+            "remainingOutflowYuan",
+            "expectedSaleYuan",
+            "feeYuan",
+            "bufferYuan"
+          ],
+          "additionalProperties": false
+        },
+        "expected": {
+          "type": "object",
+          "properties": {
+            "currentAvailableYuan": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "baseNetGapYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "noSaleTimingGapYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "allInGapYuan": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "allInResult": {
+              "enum": [
+                "known",
+                "missing"
+              ]
+            }
+          },
+          "required": [
+            "currentAvailableYuan",
+            "baseNetGapYuan",
+            "noSaleTimingGapYuan",
+            "allInGapYuan",
+            "allInResult"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "caseId",
+        "title",
+        "kind",
+        "sourceRef",
+        "ruleIds",
+        "assumptions",
+        "input",
+        "expected"
+      ],
+      "additionalProperties": false
+    },
+    "deposit_threshold": {
+      "type": "object",
+      "properties": {
+        "caseId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "const": "deposit_threshold"
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ruleIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "input": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "enum": [
+                "deposit",
+                "cd_buy",
+                "bond_buy"
+              ]
+            },
+            "exposureYuan": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "navYuan": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "addExposureYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "action",
+            "exposureYuan",
+            "navYuan",
+            "addExposureYuan"
+          ],
+          "additionalProperties": false
+        },
+        "expected": {
+          "type": "object",
+          "properties": {
+            "result": {
+              "enum": [
+                "pass",
+                "block",
+                "not_applicable",
+                "missing"
+              ]
+            },
+            "crossProductDelta": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?(0|[1-9][0-9]*)$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "actualPostExposureYuan": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "result",
+            "crossProductDelta",
+            "actualPostExposureYuan"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "caseId",
+        "title",
+        "kind",
+        "sourceRef",
+        "ruleIds",
+        "assumptions",
+        "input",
+        "expected"
+      ],
+      "additionalProperties": false
+    },
+    "warning_threshold": {
+      "type": "object",
+      "properties": {
+        "caseId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "const": "warning_threshold"
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ruleIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "input": {
+          "type": "object",
+          "properties": {
+            "postExposureYuan": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "navYuan": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "postExposureYuan",
+            "navYuan"
+          ],
+          "additionalProperties": false
+        },
+        "expected": {
+          "type": "object",
+          "properties": {
+            "result": {
+              "enum": [
+                "pass",
+                "warn",
+                "missing"
+              ]
+            },
+            "blocksByItself": {
+              "const": false
+            },
+            "headroomYuan": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "result",
+            "blocksByItself",
+            "headroomYuan"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "caseId",
+        "title",
+        "kind",
+        "sourceRef",
+        "ruleIds",
+        "assumptions",
+        "input",
+        "expected"
+      ],
+      "additionalProperties": false
+    },
+    "batch_cash": {
+      "type": "object",
+      "properties": {
+        "caseId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "const": "batch_cash"
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ruleIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "input": {
+          "type": "object",
+          "properties": {
+            "availableYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "requiredCashYuan": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "bufferYuan": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "availableYuan",
+            "requiredCashYuan",
+            "bufferYuan"
+          ],
+          "additionalProperties": false
+        },
+        "expected": {
+          "type": "object",
+          "properties": {
+            "result": {
+              "enum": [
+                "pass",
+                "block",
+                "missing"
+              ]
+            },
+            "totalRequiredYuan": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "afterYuan": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "result",
+            "totalRequiredYuan",
+            "afterYuan"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "caseId",
+        "title",
+        "kind",
+        "sourceRef",
+        "ruleIds",
+        "assumptions",
+        "input",
+        "expected"
+      ],
+      "additionalProperties": false
+    },
+    "cash_migration": {
+      "type": "object",
+      "properties": {
+        "caseId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "const": "cash_migration"
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ruleIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "input": {
+          "type": "object",
+          "properties": {
+            "settledBeforeYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "platformBeforeYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "payableBeforeYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "localBeforeYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "releasedReserveYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "newPayableYuan": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "settleYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "settledBeforeYuan",
+            "platformBeforeYuan",
+            "payableBeforeYuan",
+            "localBeforeYuan",
+            "releasedReserveYuan",
+            "newPayableYuan",
+            "settleYuan"
+          ],
+          "additionalProperties": false
+        },
+        "expected": {
+          "type": "object",
+          "properties": {
+            "settledAfterYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "platformAfterYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "payableAfterYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "availableAfterYuan": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "result": {
+              "enum": [
+                "known",
+                "reconcile_required"
+              ]
+            }
+          },
+          "required": [
+            "settledAfterYuan",
+            "platformAfterYuan",
+            "payableAfterYuan",
+            "availableAfterYuan",
+            "result"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "caseId",
+        "title",
+        "kind",
+        "sourceRef",
+        "ruleIds",
+        "assumptions",
+        "input",
+        "expected"
+      ],
+      "additionalProperties": false
+    },
+    "split_amount": {
+      "type": "object",
+      "properties": {
+        "caseId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "const": "split_amount"
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ruleIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "input": {
+          "type": "object",
+          "properties": {
+            "targetYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "filledYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "lockedYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "availableYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "feeYuan": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "bufferYuan": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "unitYuan": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "targetYuan",
+            "filledYuan",
+            "lockedYuan",
+            "availableYuan",
+            "feeYuan",
+            "bufferYuan",
+            "unitYuan"
+          ],
+          "additionalProperties": false
+        },
+        "expected": {
+          "type": "object",
+          "properties": {
+            "arrangeableYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "proposedNowYuan": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "unarrangedAfterProposalYuan": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "result": {
+              "enum": [
+                "proposed",
+                "waiting",
+                "missing",
+                "unit_conflict"
+              ]
+            },
+            "targetRetainedYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "arrangeableYuan",
+            "proposedNowYuan",
+            "unarrangedAfterProposalYuan",
+            "result",
+            "targetRetainedYuan"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "caseId",
+        "title",
+        "kind",
+        "sourceRef",
+        "ruleIds",
+        "assumptions",
+        "input",
+        "expected"
+      ],
+      "additionalProperties": false
+    },
+    "event_dependency": {
+      "type": "object",
+      "properties": {
+        "caseId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "const": "event_dependency"
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ruleIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "input": {
+          "type": "object",
+          "properties": {
+            "requiredKind": {
+              "enum": [
+                "instruction_filled",
+                "cash_available"
+              ]
+            },
+            "requiredYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "observedKind": {
+              "enum": [
+                "accepted",
+                "fill",
+                "cash_settled",
+                "cash_available",
+                "funding_limit"
+              ]
+            },
+            "observedYuan": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "sameReference": {
+              "type": "boolean"
+            },
+            "ruleResult": {
+              "enum": [
+                "pass",
+                "block",
+                "missing"
+              ]
+            },
+            "approvalCovers": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "requiredKind",
+            "requiredYuan",
+            "observedKind",
+            "observedYuan",
+            "sameReference",
+            "ruleResult",
+            "approvalCovers"
+          ],
+          "additionalProperties": false
+        },
+        "expected": {
+          "type": "object",
+          "properties": {
+            "conditionMet": {
+              "type": "boolean"
+            },
+            "manualDispatchRequired": {
+              "const": true
+            },
+            "dispatchGate": {
+              "enum": [
+                "eligible_for_manual",
+                "waiting_conditions",
+                "hard_block",
+                "insufficient_data",
+                "reapprove"
+              ]
+            }
+          },
+          "required": [
+            "conditionMet",
+            "manualDispatchRequired",
+            "dispatchGate"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "caseId",
+        "title",
+        "kind",
+        "sourceRef",
+        "ruleIds",
+        "assumptions",
+        "input",
+        "expected"
+      ],
+      "additionalProperties": false
+    },
+    "Candidate": {
+      "type": "object",
+      "properties": {
+        "candidateId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hardPass": {
+          "type": "boolean"
+        },
+        "completeTarget": {
+          "type": "boolean"
+        },
+        "inputsComplete": {
+          "type": "boolean"
+        },
+        "peakFundingYuan": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "warningsNew": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "headroomYuan": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "comparisonGroupId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "executionClass": {
+          "enum": [
+            "current_confirmed",
+            "conditional"
+          ]
+        }
+      },
+      "required": [
+        "candidateId",
+        "hardPass",
+        "completeTarget",
+        "inputsComplete",
+        "peakFundingYuan",
+        "warningsNew",
+        "headroomYuan",
+        "comparisonGroupId",
+        "executionClass"
+      ],
+      "additionalProperties": false
+    },
+    "ranking": {
+      "type": "object",
+      "properties": {
+        "caseId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "const": "ranking"
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ruleIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "input": {
+          "type": "object",
+          "properties": {
+            "priority": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "settlement_safety",
+                  "fewer_warnings",
+                  "metric_headroom"
+                ]
+              }
+            },
+            "candidates": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Candidate"
+              }
+            },
+            "comparisonGroupId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "executionClass": {
+              "enum": [
+                "current_confirmed",
+                "conditional"
+              ]
+            }
+          },
+          "required": [
+            "priority",
+            "candidates",
+            "comparisonGroupId",
+            "executionClass"
+          ],
+          "additionalProperties": false
+        },
+        "expected": {
+          "type": "object",
+          "properties": {
+            "eligibleIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "rankedIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            },
+            "excludedPreferenceKeys": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "metric_headroom"
+                ]
+              }
+            }
+          },
+          "required": [
+            "eligibleIds",
+            "rankedIds",
+            "reason",
+            "excludedPreferenceKeys"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "caseId",
+        "title",
+        "kind",
+        "sourceRef",
+        "ruleIds",
+        "assumptions",
+        "input",
+        "expected"
+      ],
+      "additionalProperties": false
+    },
+    "search_classification": {
+      "type": "object",
+      "properties": {
+        "caseId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "const": "search_classification"
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ruleIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "input": {
+          "type": "object",
+          "properties": {
+            "inputsComplete": {
+              "type": "boolean"
+            },
+            "fullFeasibleFound": {
+              "type": "boolean"
+            },
+            "externalConditionsUnmet": {
+              "type": "boolean"
+            },
+            "mathematicalConflict": {
+              "type": "boolean"
+            },
+            "exhaustiveFiniteDomain": {
+              "type": "boolean"
+            },
+            "searched": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "totalCandidates": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "proof": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "none",
+                    "funding_bound",
+                    "fixed_s13_exhaustion"
+                  ]
+                },
+                "scopeKey": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "initialYuan": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "maximumInflowYuan": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "outflowTargetYuan": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "domainOrderCount": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "scopeKey",
+                "initialYuan",
+                "maximumInflowYuan",
+                "outflowTargetYuan",
+                "domainOrderCount"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "inputsComplete",
+            "fullFeasibleFound",
+            "externalConditionsUnmet",
+            "mathematicalConflict",
+            "exhaustiveFiniteDomain",
+            "searched",
+            "totalCandidates",
+            "proof"
+          ],
+          "additionalProperties": false
+        },
+        "expected": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "enum": [
+                "feasible",
+                "waiting_conditions",
+                "proven_infeasible",
+                "search_exhausted",
+                "insufficient_data"
+              ]
+            },
+            "proofScope": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "status",
+            "proofScope"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "caseId",
+        "title",
+        "kind",
+        "sourceRef",
+        "ruleIds",
+        "assumptions",
+        "input",
+        "expected"
+      ],
+      "additionalProperties": false
+    },
+    "CaseBook": {
+      "type": "object",
+      "properties": {
+        "calculationVersion": {
+          "const": "2B-0.1.0"
+        },
+        "ruleVersion": {
+          "const": "2B-0.1.0"
+        },
+        "expectedOrigin": {
+          "const": "independent_literal_expectations"
+        },
+        "cases": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/funding"
+              },
+              {
+                "$ref": "#/$defs/deposit_threshold"
+              },
+              {
+                "$ref": "#/$defs/warning_threshold"
+              },
+              {
+                "$ref": "#/$defs/batch_cash"
+              },
+              {
+                "$ref": "#/$defs/cash_migration"
+              },
+              {
+                "$ref": "#/$defs/split_amount"
+              },
+              {
+                "$ref": "#/$defs/event_dependency"
+              },
+              {
+                "$ref": "#/$defs/ranking"
+              },
+              {
+                "$ref": "#/$defs/search_classification"
+              },
+              {
+                "$ref": "#/$defs/effective_exposure"
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "calculationVersion",
+        "ruleVersion",
+        "expectedOrigin",
+        "cases"
+      ],
+      "additionalProperties": false
+    },
+    "Explanation": {
+      "type": "object",
+      "properties": {
+        "explanationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "context": {
+          "type": "object",
+          "properties": {
+            "scenarioId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "runId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "portfolioId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "businessDate": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          "required": [
+            "scenarioId",
+            "runId",
+            "portfolioId",
+            "businessDate"
+          ],
+          "additionalProperties": false
+        },
+        "snapshotVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "planVersions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "rulesVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "preferencesVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "proposalId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "proposalVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "origin": {
+          "enum": [
+            "manual_expected",
+            "deterministic_engine",
+            "ai_draft"
+          ]
+        },
+        "checkIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "uncompletedPlanIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "conditionIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "searchStatus": {
+          "enum": [
+            "feasible",
+            "waiting_conditions",
+            "proven_infeasible",
+            "search_exhausted",
+            "insufficient_data"
+          ]
+        },
+        "proofScope": {
+          "type": "string",
+          "minLength": 1
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "authorizesDispatch": {
+          "const": false
+        }
+      },
+      "required": [
+        "explanationId",
+        "context",
+        "snapshotVersion",
+        "planVersions",
+        "rulesVersion",
+        "preferencesVersion",
+        "proposalId",
+        "proposalVersion",
+        "origin",
+        "checkIds",
+        "uncompletedPlanIds",
+        "conditionIds",
+        "searchStatus",
+        "proofScope",
+        "assumptions",
+        "summary",
+        "authorizesDispatch"
+      ],
+      "additionalProperties": false
+    },
+    "effective_exposure": {
+      "type": "object",
+      "properties": {
+        "caseId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "const": "effective_exposure"
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ruleIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "input": {
+          "type": "object",
+          "properties": {
+            "numeratorYuan": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "navYuan": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "basis": {
+              "enum": [
+                "confirmed_only",
+                "includes_listed",
+                "unknown"
+              ]
+            },
+            "pendingAdds": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "instructionId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "unfilledExposureYuan": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "asOfSequence": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "instructionId",
+                  "unfilledExposureYuan",
+                  "asOfSequence"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "snapshotSequence": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "includedPendingExposure": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "instructionId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "includedUnfilledExposureYuan": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "instructionId",
+                  "includedUnfilledExposureYuan"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "numeratorYuan",
+            "navYuan",
+            "basis",
+            "pendingAdds",
+            "snapshotSequence",
+            "includedPendingExposure"
+          ],
+          "additionalProperties": false
+        },
+        "expected": {
+          "type": "object",
+          "properties": {
+            "effectiveExposureYuan": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "result": {
+              "enum": [
+                "pass",
+                "block",
+                "missing"
+              ]
+            }
+          },
+          "required": [
+            "effectiveExposureYuan",
+            "result"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "caseId",
+        "title",
+        "kind",
+        "sourceRef",
+        "ruleIds",
+        "assumptions",
+        "input",
+        "expected"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

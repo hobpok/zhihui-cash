@@ -1,0 +1,1026 @@
+{
+  "templateVersion": "initial-template-1",
+  "templateId": "SIM-DEFAULT-THREE-GATES-20261019",
+  "label": "500亿基金三项银行约束与日终5亿现金样例",
+  "revision": 1,
+  "demoMode": "single-day-principal-v1",
+  "provenance": {
+    "kind": "synthetic",
+    "note": "2026-10-19用户确认金额及规则的本地模拟。A为广州银行（无托管资格、模拟银行净资产1000亿），B为中原银行。工商银行演示本基金7.9%起步、先卖存单再存款；成都农商银行演示全公司5.9%起步、先存款后存单。沿用十家银行名称，郑州、微众模拟评级由BB调整为AA以分散存量并减少低评级约束干扰；全部银行评级、资格、净资产、证券代码、金额及期限均为模拟参数，不代表真实银行资料或行情。其他基金仅成农商29.9亿，不计入本基金500亿净资产。"
+  },
+  "businessDate": "2026-10-19",
+  "portfolio": {
+    "portfolioId": "SIM-FUND-500",
+    "label": "模拟500亿货币基金",
+    "navYuan": 50000000000,
+    "accountCashYuan": 500000000,
+    "netSubscriptionYuan": 0,
+    "feeYuan": 0,
+    "bufferYuan": 0,
+    "legacyBankExposureYuan": null
+  },
+  "banks": [
+    {
+      "bankId": "SIM-BANK-ZY",
+      "label": "中原银行",
+      "custodyQualified": false,
+      "rating": "AAA",
+      "ratingAsOf": "2026-10-19",
+      "quarterlyNetAssetsYuan": 100000000000,
+      "quarterEnd": "2026-06-30"
+    },
+    {
+      "bankId": "SIM-BANK-GZ",
+      "label": "广州银行",
+      "custodyQualified": false,
+      "rating": "AA",
+      "ratingAsOf": "2026-10-19",
+      "quarterlyNetAssetsYuan": 100000000000,
+      "quarterEnd": "2026-06-30"
+    },
+    {
+      "bankId": "SIM-BANK-XM",
+      "label": "厦门银行",
+      "custodyQualified": false,
+      "rating": "AA",
+      "ratingAsOf": "2026-10-19",
+      "quarterlyNetAssetsYuan": 100000000000,
+      "quarterEnd": "2026-06-30"
+    },
+    {
+      "bankId": "SIM-BANK-ZZ",
+      "label": "郑州银行",
+      "custodyQualified": true,
+      "rating": "AA",
+      "ratingAsOf": "2026-10-19",
+      "quarterlyNetAssetsYuan": 100000000000,
+      "quarterEnd": "2026-06-30"
+    },
+    {
+      "bankId": "SIM-BANK-WB",
+      "label": "微众银行",
+      "custodyQualified": true,
+      "rating": "AA",
+      "ratingAsOf": "2026-10-19",
+      "quarterlyNetAssetsYuan": 100000000000,
+      "quarterEnd": "2026-06-30"
+    },
+    {
+      "bankId": "SIM-BANK-ICBC",
+      "label": "工商银行",
+      "custodyQualified": true,
+      "rating": "AAA",
+      "ratingAsOf": "2026-10-19",
+      "quarterlyNetAssetsYuan": 200000000000,
+      "quarterEnd": "2026-06-30"
+    },
+    {
+      "bankId": "SIM-BANK-CCB",
+      "label": "建设银行",
+      "custodyQualified": true,
+      "rating": "AAA",
+      "ratingAsOf": "2026-10-19",
+      "quarterlyNetAssetsYuan": 200000000000,
+      "quarterEnd": "2026-06-30"
+    },
+    {
+      "bankId": "SIM-BANK-CDRCB",
+      "label": "成都农商银行",
+      "custodyQualified": true,
+      "rating": "AAA",
+      "ratingAsOf": "2026-10-19",
+      "quarterlyNetAssetsYuan": 110000000000,
+      "quarterEnd": "2026-06-30"
+    },
+    {
+      "bankId": "SIM-BANK-CMB",
+      "label": "招商银行",
+      "custodyQualified": true,
+      "rating": "AAA",
+      "ratingAsOf": "2026-10-19",
+      "quarterlyNetAssetsYuan": 200000000000,
+      "quarterEnd": "2026-06-30"
+    },
+    {
+      "bankId": "SIM-BANK-CIB",
+      "label": "兴业银行",
+      "custodyQualified": true,
+      "rating": "AAA",
+      "ratingAsOf": "2026-10-19",
+      "quarterlyNetAssetsYuan": 200000000000,
+      "quarterEnd": "2026-06-30"
+    }
+  ],
+  "securities": [
+    {
+      "securityId": "SIM-GOV-30",
+      "label": "模拟一年内政府债",
+      "instrumentKind": "government_bond",
+      "issuerBankId": null,
+      "issuerType": "government",
+      "isGovernmentBond": true,
+      "remainingTradingDays": 30
+    },
+    {
+      "securityId": "SIM-REVERSE-OLD",
+      "label": "模拟存量逆回购（非当日到期）",
+      "instrumentKind": "repo",
+      "issuerBankId": null,
+      "issuerType": "non_bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 7
+    },
+    {
+      "securityId": "SIM-GZ-DEP-OLD",
+      "label": "模拟广州银行存款持仓",
+      "instrumentKind": "deposit",
+      "issuerBankId": "SIM-BANK-GZ",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 90
+    },
+    {
+      "securityId": "SIM-GZ-CD-OLD",
+      "label": "模拟广州银行存单持仓",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-GZ",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 90
+    },
+    {
+      "securityId": "SIM-ZY-CD-OLD",
+      "label": "模拟中原银行存单持仓",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-ZY",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 90
+    },
+    {
+      "securityId": "SIM-XM-DEP-OLD",
+      "label": "模拟厦门银行存款持仓",
+      "instrumentKind": "deposit",
+      "issuerBankId": "SIM-BANK-XM",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 108
+    },
+    {
+      "securityId": "SIM-XM-CD-OLD",
+      "label": "模拟厦门银行存单持仓",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-XM",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 107
+    },
+    {
+      "securityId": "SIM-ICBC-DEP-OLD",
+      "label": "模拟工商银行存款持仓",
+      "instrumentKind": "deposit",
+      "issuerBankId": "SIM-BANK-ICBC",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 108
+    },
+    {
+      "securityId": "SIM-ICBC-CD-OLD",
+      "label": "模拟工商银行存单持仓",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-ICBC",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 107
+    },
+    {
+      "securityId": "SIM-CDRCB-DEP-OLD",
+      "label": "模拟成都农商银行存款持仓",
+      "instrumentKind": "deposit",
+      "issuerBankId": "SIM-BANK-CDRCB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 108
+    },
+    {
+      "securityId": "SIM-CDRCB-CD-OLD",
+      "label": "模拟成都农商银行存单持仓",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-CDRCB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 107
+    },
+    {
+      "securityId": "SIM-CCB-DEP-OLD",
+      "label": "模拟建设银行存款持仓",
+      "instrumentKind": "deposit",
+      "issuerBankId": "SIM-BANK-CCB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 108
+    },
+    {
+      "securityId": "SIM-CCB-CD-OLD",
+      "label": "模拟建设银行存单持仓",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-CCB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 107
+    },
+    {
+      "securityId": "SIM-CMB-DEP-OLD",
+      "label": "模拟招商银行存款持仓",
+      "instrumentKind": "deposit",
+      "issuerBankId": "SIM-BANK-CMB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 108
+    },
+    {
+      "securityId": "SIM-CMB-CD-OLD",
+      "label": "模拟招商银行存单持仓",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-CMB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 107
+    },
+    {
+      "securityId": "SIM-CIB-DEP-OLD",
+      "label": "模拟兴业银行存款持仓",
+      "instrumentKind": "deposit",
+      "issuerBankId": "SIM-BANK-CIB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 108
+    },
+    {
+      "securityId": "SIM-CIB-CD-OLD",
+      "label": "模拟兴业银行存单持仓",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-CIB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 107
+    },
+    {
+      "securityId": "SIM-ZZ-DEP-OLD",
+      "label": "模拟郑州银行存款持仓",
+      "instrumentKind": "deposit",
+      "issuerBankId": "SIM-BANK-ZZ",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 108
+    },
+    {
+      "securityId": "SIM-ZZ-CD-OLD",
+      "label": "模拟郑州银行存单持仓",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-ZZ",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 107
+    },
+    {
+      "securityId": "SIM-WB-DEP-OLD",
+      "label": "模拟微众银行存款持仓",
+      "instrumentKind": "deposit",
+      "issuerBankId": "SIM-BANK-WB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 108
+    },
+    {
+      "securityId": "SIM-WB-CD-OLD",
+      "label": "模拟微众银行存单持仓",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-WB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 107
+    },
+    {
+      "securityId": "SIM-GZ-CD-NEW",
+      "label": "模拟广州银行新存单",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-GZ",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 90
+    },
+    {
+      "securityId": "SIM-ICBC-DEP-NEW",
+      "label": "模拟工商银行新存款",
+      "instrumentKind": "deposit",
+      "issuerBankId": "SIM-BANK-ICBC",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 90
+    },
+    {
+      "securityId": "SIM-CDRCB-DEP-NEW",
+      "label": "模拟成都农商银行新存款",
+      "instrumentKind": "deposit",
+      "issuerBankId": "SIM-BANK-CDRCB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 90
+    },
+    {
+      "securityId": "SIM-ICBC-CD-30",
+      "label": "模拟工商银行可买存单30天",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-ICBC",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 30
+    },
+    {
+      "securityId": "SIM-ICBC-CD-60",
+      "label": "模拟工商银行可买存单60天",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-ICBC",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 60
+    },
+    {
+      "securityId": "SIM-ICBC-CD-90",
+      "label": "模拟工商银行可买存单90天",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-ICBC",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 90
+    },
+    {
+      "securityId": "SIM-ICBC-CD-120",
+      "label": "模拟工商银行可买存单120天",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-ICBC",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 120
+    },
+    {
+      "securityId": "SIM-CCB-CD-30",
+      "label": "模拟建设银行可买存单30天",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-CCB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 30
+    },
+    {
+      "securityId": "SIM-CCB-CD-60",
+      "label": "模拟建设银行可买存单60天",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-CCB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 60
+    },
+    {
+      "securityId": "SIM-CCB-CD-90",
+      "label": "模拟建设银行可买存单90天",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-CCB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 90
+    },
+    {
+      "securityId": "SIM-CCB-CD-120",
+      "label": "模拟建设银行可买存单120天",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-CCB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 120
+    },
+    {
+      "securityId": "SIM-CDRCB-CD-30",
+      "label": "模拟成都农商银行可买存单30天",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-CDRCB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 30
+    },
+    {
+      "securityId": "SIM-CDRCB-CD-60",
+      "label": "模拟成都农商银行可买存单60天",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-CDRCB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 60
+    },
+    {
+      "securityId": "SIM-CDRCB-CD-90",
+      "label": "模拟成都农商银行可买存单90天",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-CDRCB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 90
+    },
+    {
+      "securityId": "SIM-CDRCB-CD-120",
+      "label": "模拟成都农商银行可买存单120天",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-CDRCB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 120
+    },
+    {
+      "securityId": "SIM-CMB-CD-30",
+      "label": "模拟招商银行可买存单30天",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-CMB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 30
+    },
+    {
+      "securityId": "SIM-CMB-CD-60",
+      "label": "模拟招商银行可买存单60天",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-CMB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 60
+    },
+    {
+      "securityId": "SIM-CMB-CD-90",
+      "label": "模拟招商银行可买存单90天",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-CMB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 90
+    },
+    {
+      "securityId": "SIM-CMB-CD-120",
+      "label": "模拟招商银行可买存单120天",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-CMB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 120
+    },
+    {
+      "securityId": "SIM-CIB-CD-30",
+      "label": "模拟兴业银行可买存单30天",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-CIB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 30
+    },
+    {
+      "securityId": "SIM-CIB-CD-60",
+      "label": "模拟兴业银行可买存单60天",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-CIB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 60
+    },
+    {
+      "securityId": "SIM-CIB-CD-90",
+      "label": "模拟兴业银行可买存单90天",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-CIB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 90
+    },
+    {
+      "securityId": "SIM-CIB-CD-120",
+      "label": "模拟兴业银行可买存单120天",
+      "instrumentKind": "cd",
+      "issuerBankId": "SIM-BANK-CIB",
+      "issuerType": "bank",
+      "isGovernmentBond": false,
+      "remainingTradingDays": 120
+    }
+  ],
+  "holdings": [
+    {
+      "holdingId": "H-SIM-GOV-30",
+      "securityId": "SIM-GOV-30",
+      "amountYuan": 2000000000,
+      "sellableYuan": 2000000000
+    },
+    {
+      "holdingId": "H-SIM-REVERSE-OLD",
+      "securityId": "SIM-REVERSE-OLD",
+      "amountYuan": 7500000000,
+      "sellableYuan": 0
+    },
+    {
+      "holdingId": "H-SIM-GZ-DEP-OLD",
+      "securityId": "SIM-GZ-DEP-OLD",
+      "amountYuan": 500000000,
+      "sellableYuan": 0
+    },
+    {
+      "holdingId": "H-SIM-GZ-CD-OLD",
+      "securityId": "SIM-GZ-CD-OLD",
+      "amountYuan": 500000000,
+      "sellableYuan": 500000000
+    },
+    {
+      "holdingId": "H-SIM-ZY-CD-OLD",
+      "securityId": "SIM-ZY-CD-OLD",
+      "amountYuan": 2450000000,
+      "sellableYuan": 2450000000
+    },
+    {
+      "holdingId": "H-SIM-XM-DEP-OLD",
+      "securityId": "SIM-XM-DEP-OLD",
+      "amountYuan": 500000000,
+      "sellableYuan": 0
+    },
+    {
+      "holdingId": "H-SIM-XM-CD-OLD",
+      "securityId": "SIM-XM-CD-OLD",
+      "amountYuan": 1500000000,
+      "sellableYuan": 1500000000
+    },
+    {
+      "holdingId": "H-SIM-ICBC-DEP-OLD",
+      "securityId": "SIM-ICBC-DEP-OLD",
+      "amountYuan": 2000000000,
+      "sellableYuan": 0
+    },
+    {
+      "holdingId": "H-SIM-ICBC-CD-OLD",
+      "securityId": "SIM-ICBC-CD-OLD",
+      "amountYuan": 1950000000,
+      "sellableYuan": 1950000000
+    },
+    {
+      "holdingId": "H-SIM-CDRCB-DEP-OLD",
+      "securityId": "SIM-CDRCB-DEP-OLD",
+      "amountYuan": 1000000000,
+      "sellableYuan": 0
+    },
+    {
+      "holdingId": "H-SIM-CDRCB-CD-OLD",
+      "securityId": "SIM-CDRCB-CD-OLD",
+      "amountYuan": 2500000000,
+      "sellableYuan": 2500000000
+    },
+    {
+      "holdingId": "H-SIM-CCB-DEP-OLD",
+      "securityId": "SIM-CCB-DEP-OLD",
+      "amountYuan": 4400000000,
+      "sellableYuan": 0
+    },
+    {
+      "holdingId": "H-SIM-CCB-CD-OLD",
+      "securityId": "SIM-CCB-CD-OLD",
+      "amountYuan": 3000000000,
+      "sellableYuan": 3000000000
+    },
+    {
+      "holdingId": "H-SIM-CMB-DEP-OLD",
+      "securityId": "SIM-CMB-DEP-OLD",
+      "amountYuan": 4400000000,
+      "sellableYuan": 0
+    },
+    {
+      "holdingId": "H-SIM-CMB-CD-OLD",
+      "securityId": "SIM-CMB-CD-OLD",
+      "amountYuan": 3000000000,
+      "sellableYuan": 3000000000
+    },
+    {
+      "holdingId": "H-SIM-CIB-DEP-OLD",
+      "securityId": "SIM-CIB-DEP-OLD",
+      "amountYuan": 4400000000,
+      "sellableYuan": 0
+    },
+    {
+      "holdingId": "H-SIM-CIB-CD-OLD",
+      "securityId": "SIM-CIB-CD-OLD",
+      "amountYuan": 3000000000,
+      "sellableYuan": 3000000000
+    },
+    {
+      "holdingId": "H-SIM-ZZ-DEP-OLD",
+      "securityId": "SIM-ZZ-DEP-OLD",
+      "amountYuan": 1000000000,
+      "sellableYuan": 0
+    },
+    {
+      "holdingId": "H-SIM-ZZ-CD-OLD",
+      "securityId": "SIM-ZZ-CD-OLD",
+      "amountYuan": 2700000000,
+      "sellableYuan": 2700000000
+    },
+    {
+      "holdingId": "H-SIM-WB-DEP-OLD",
+      "securityId": "SIM-WB-DEP-OLD",
+      "amountYuan": 1000000000,
+      "sellableYuan": 0
+    },
+    {
+      "holdingId": "H-SIM-WB-CD-OLD",
+      "securityId": "SIM-WB-CD-OLD",
+      "amountYuan": 2700000000,
+      "sellableYuan": 2700000000
+    }
+  ],
+  "termWeights": {
+    "version": "term-weights-1",
+    "coverage": "complete",
+    "calendar": "day-365-demo-v1",
+    "asOfDate": "2026-10-19",
+    "assets": [
+      {
+        "weightId": "TW-SIM-CASH",
+        "label": "模拟账户现金",
+        "amountYuan": 500000000,
+        "remainingTradingDays": 0,
+        "sourceAccountCash": true
+      },
+      {
+        "weightId": "TW-SIM-GOV-30",
+        "label": "模拟一年内政府债",
+        "amountYuan": 2000000000,
+        "remainingTradingDays": 30,
+        "sourceHoldingId": "H-SIM-GOV-30"
+      },
+      {
+        "weightId": "TW-SIM-REVERSE-OLD",
+        "label": "模拟存量逆回购（非当日到期）",
+        "amountYuan": 7500000000,
+        "remainingTradingDays": 7,
+        "sourceHoldingId": "H-SIM-REVERSE-OLD"
+      },
+      {
+        "weightId": "TW-SIM-GZ-DEP-OLD",
+        "label": "模拟广州银行存款持仓",
+        "amountYuan": 500000000,
+        "remainingTradingDays": 90,
+        "sourceHoldingId": "H-SIM-GZ-DEP-OLD"
+      },
+      {
+        "weightId": "TW-SIM-GZ-CD-OLD",
+        "label": "模拟广州银行存单持仓",
+        "amountYuan": 500000000,
+        "remainingTradingDays": 90,
+        "sourceHoldingId": "H-SIM-GZ-CD-OLD"
+      },
+      {
+        "weightId": "TW-SIM-ZY-CD-OLD",
+        "label": "模拟中原银行存单持仓",
+        "amountYuan": 2450000000,
+        "remainingTradingDays": 90,
+        "sourceHoldingId": "H-SIM-ZY-CD-OLD"
+      },
+      {
+        "weightId": "TW-SIM-XM-DEP-OLD",
+        "label": "模拟厦门银行存款持仓",
+        "amountYuan": 500000000,
+        "remainingTradingDays": 108,
+        "sourceHoldingId": "H-SIM-XM-DEP-OLD"
+      },
+      {
+        "weightId": "TW-SIM-XM-CD-OLD",
+        "label": "模拟厦门银行存单持仓",
+        "amountYuan": 1500000000,
+        "remainingTradingDays": 107,
+        "sourceHoldingId": "H-SIM-XM-CD-OLD"
+      },
+      {
+        "weightId": "TW-SIM-ICBC-DEP-OLD",
+        "label": "模拟工商银行存款持仓",
+        "amountYuan": 2000000000,
+        "remainingTradingDays": 108,
+        "sourceHoldingId": "H-SIM-ICBC-DEP-OLD"
+      },
+      {
+        "weightId": "TW-SIM-ICBC-CD-OLD",
+        "label": "模拟工商银行存单持仓",
+        "amountYuan": 1950000000,
+        "remainingTradingDays": 107,
+        "sourceHoldingId": "H-SIM-ICBC-CD-OLD"
+      },
+      {
+        "weightId": "TW-SIM-CDRCB-DEP-OLD",
+        "label": "模拟成都农商银行存款持仓",
+        "amountYuan": 1000000000,
+        "remainingTradingDays": 108,
+        "sourceHoldingId": "H-SIM-CDRCB-DEP-OLD"
+      },
+      {
+        "weightId": "TW-SIM-CDRCB-CD-OLD",
+        "label": "模拟成都农商银行存单持仓",
+        "amountYuan": 2500000000,
+        "remainingTradingDays": 107,
+        "sourceHoldingId": "H-SIM-CDRCB-CD-OLD"
+      },
+      {
+        "weightId": "TW-SIM-CCB-DEP-OLD",
+        "label": "模拟建设银行存款持仓",
+        "amountYuan": 4400000000,
+        "remainingTradingDays": 108,
+        "sourceHoldingId": "H-SIM-CCB-DEP-OLD"
+      },
+      {
+        "weightId": "TW-SIM-CCB-CD-OLD",
+        "label": "模拟建设银行存单持仓",
+        "amountYuan": 3000000000,
+        "remainingTradingDays": 107,
+        "sourceHoldingId": "H-SIM-CCB-CD-OLD"
+      },
+      {
+        "weightId": "TW-SIM-CMB-DEP-OLD",
+        "label": "模拟招商银行存款持仓",
+        "amountYuan": 4400000000,
+        "remainingTradingDays": 108,
+        "sourceHoldingId": "H-SIM-CMB-DEP-OLD"
+      },
+      {
+        "weightId": "TW-SIM-CMB-CD-OLD",
+        "label": "模拟招商银行存单持仓",
+        "amountYuan": 3000000000,
+        "remainingTradingDays": 107,
+        "sourceHoldingId": "H-SIM-CMB-CD-OLD"
+      },
+      {
+        "weightId": "TW-SIM-CIB-DEP-OLD",
+        "label": "模拟兴业银行存款持仓",
+        "amountYuan": 4400000000,
+        "remainingTradingDays": 108,
+        "sourceHoldingId": "H-SIM-CIB-DEP-OLD"
+      },
+      {
+        "weightId": "TW-SIM-CIB-CD-OLD",
+        "label": "模拟兴业银行存单持仓",
+        "amountYuan": 3000000000,
+        "remainingTradingDays": 107,
+        "sourceHoldingId": "H-SIM-CIB-CD-OLD"
+      },
+      {
+        "weightId": "TW-SIM-ZZ-DEP-OLD",
+        "label": "模拟郑州银行存款持仓",
+        "amountYuan": 1000000000,
+        "remainingTradingDays": 108,
+        "sourceHoldingId": "H-SIM-ZZ-DEP-OLD"
+      },
+      {
+        "weightId": "TW-SIM-ZZ-CD-OLD",
+        "label": "模拟郑州银行存单持仓",
+        "amountYuan": 2700000000,
+        "remainingTradingDays": 107,
+        "sourceHoldingId": "H-SIM-ZZ-CD-OLD"
+      },
+      {
+        "weightId": "TW-SIM-WB-DEP-OLD",
+        "label": "模拟微众银行存款持仓",
+        "amountYuan": 1000000000,
+        "remainingTradingDays": 108,
+        "sourceHoldingId": "H-SIM-WB-DEP-OLD"
+      },
+      {
+        "weightId": "TW-SIM-WB-CD-OLD",
+        "label": "模拟微众银行存单持仓",
+        "amountYuan": 2700000000,
+        "remainingTradingDays": 107,
+        "sourceHoldingId": "H-SIM-WB-CD-OLD"
+      }
+    ],
+    "liabilities": [
+      {
+        "weightId": "TW-REPO-LIABILITY",
+        "label": "存续正回购负债（当日到期未还）",
+        "amountYuan": 2500000000,
+        "remainingTradingDays": 0
+      }
+    ],
+    "positiveRepos": [
+      {
+        "weightId": "TW-REPO-ADJUSTMENT",
+        "label": "存续正回购调整（当日到期）",
+        "amountYuan": 2500000000,
+        "remainingTradingDays": 0
+      }
+    ]
+  },
+  "otherFundBankExposure": [
+    {
+      "bankId": "SIM-BANK-ZY",
+      "depositYuan": 0,
+      "cdYuan": 0,
+      "bondYuan": 0,
+      "otherYuan": 0
+    },
+    {
+      "bankId": "SIM-BANK-GZ",
+      "depositYuan": 0,
+      "cdYuan": 0,
+      "bondYuan": 0,
+      "otherYuan": 0
+    },
+    {
+      "bankId": "SIM-BANK-XM",
+      "depositYuan": 0,
+      "cdYuan": 0,
+      "bondYuan": 0,
+      "otherYuan": 0
+    },
+    {
+      "bankId": "SIM-BANK-ZZ",
+      "depositYuan": 0,
+      "cdYuan": 0,
+      "bondYuan": 0,
+      "otherYuan": 0
+    },
+    {
+      "bankId": "SIM-BANK-WB",
+      "depositYuan": 0,
+      "cdYuan": 0,
+      "bondYuan": 0,
+      "otherYuan": 0
+    },
+    {
+      "bankId": "SIM-BANK-ICBC",
+      "depositYuan": 0,
+      "cdYuan": 0,
+      "bondYuan": 0,
+      "otherYuan": 0
+    },
+    {
+      "bankId": "SIM-BANK-CCB",
+      "depositYuan": 0,
+      "cdYuan": 0,
+      "bondYuan": 0,
+      "otherYuan": 0
+    },
+    {
+      "bankId": "SIM-BANK-CDRCB",
+      "depositYuan": 0,
+      "cdYuan": 2990000000,
+      "bondYuan": 0,
+      "otherYuan": 0
+    },
+    {
+      "bankId": "SIM-BANK-CMB",
+      "depositYuan": 0,
+      "cdYuan": 0,
+      "bondYuan": 0,
+      "otherYuan": 0
+    },
+    {
+      "bankId": "SIM-BANK-CIB",
+      "depositYuan": 0,
+      "cdYuan": 0,
+      "bondYuan": 0,
+      "otherYuan": 0
+    }
+  ],
+  "financingResources": {
+    "INTERBANK": {
+      "quotaConfirmedYuan": null,
+      "pledgeConfirmedYuan": null
+    },
+    "SSE": {
+      "quotaConfirmedYuan": null,
+      "pledgeConfirmedYuan": null
+    },
+    "SZSE": {
+      "quotaConfirmedYuan": null,
+      "pledgeConfirmedYuan": null
+    }
+  },
+  "ruleInitials": {
+    "depositThreshold": "0.08",
+    "observationThreshold": "0.082"
+  },
+  "maturityCashEvents": [
+    {
+      "eventId": "SIM-REPO-DUE-TODAY",
+      "label": "存续正回购25亿当日到期未还",
+      "kind": "repo_maturity",
+      "direction": "outflow",
+      "amountYuan": 2500000000,
+      "dueDate": "2026-10-19",
+      "includedInOpeningCash": false,
+      "sourceLiabilityWeightId": "TW-REPO-LIABILITY",
+      "sourcePositiveRepoWeightId": "TW-REPO-ADJUSTMENT"
+    }
+  ],
+  "pendingSettlements": [],
+  "draftPlans": [
+    {
+      "label": "卖出广州银行旧存单1亿",
+      "businessType": "cd_sell",
+      "direction": "inflow",
+      "counterpartyId": null,
+      "issuerId": "SIM-BANK-GZ",
+      "targetYuan": 100000000,
+      "termsNote": "模拟计划；金额、代码、期限及行情均非真实交易数据",
+      "repoTerms": null,
+      "tradeDate": "2026-10-19",
+      "settlementDate": "2026-10-19",
+      "securityId": "SIM-GZ-CD-OLD",
+      "marketTier": "secondary"
+    },
+    {
+      "label": "买入广州银行新存单16亿90天",
+      "businessType": "cd_buy",
+      "direction": "outflow",
+      "counterpartyId": null,
+      "issuerId": "SIM-BANK-GZ",
+      "targetYuan": 1600000000,
+      "termsNote": "模拟计划；金额、代码、期限及行情均非真实交易数据",
+      "repoTerms": null,
+      "tradeDate": "2026-10-19",
+      "settlementDate": "2026-10-19",
+      "securityId": "SIM-GZ-CD-NEW",
+      "marketTier": "secondary"
+    },
+    {
+      "label": "卖出工商银行旧存单0.5亿",
+      "businessType": "cd_sell",
+      "direction": "inflow",
+      "counterpartyId": null,
+      "issuerId": "SIM-BANK-ICBC",
+      "targetYuan": 50000000,
+      "termsNote": "模拟计划；金额、代码、期限及行情均非真实交易数据",
+      "repoTerms": null,
+      "tradeDate": "2026-10-19",
+      "settlementDate": "2026-10-19",
+      "securityId": "SIM-ICBC-CD-OLD",
+      "marketTier": "secondary"
+    },
+    {
+      "label": "存入工商银行1亿90天",
+      "businessType": "deposit",
+      "direction": "outflow",
+      "counterpartyId": null,
+      "issuerId": "SIM-BANK-ICBC",
+      "targetYuan": 100000000,
+      "termsNote": "模拟计划；金额、代码、期限及行情均非真实交易数据",
+      "repoTerms": null,
+      "tradeDate": "2026-10-19",
+      "settlementDate": "2026-10-19",
+      "securityId": "SIM-ICBC-DEP-NEW",
+      "marketTier": null
+    },
+    {
+      "label": "存入成都农商银行1.1亿90天",
+      "businessType": "deposit",
+      "direction": "outflow",
+      "counterpartyId": null,
+      "issuerId": "SIM-BANK-CDRCB",
+      "targetYuan": 110000000,
+      "termsNote": "模拟计划；金额、代码、期限及行情均非真实交易数据",
+      "repoTerms": null,
+      "tradeDate": "2026-10-19",
+      "settlementDate": "2026-10-19",
+      "securityId": "SIM-CDRCB-DEP-NEW",
+      "marketTier": null
+    },
+    {
+      "label": "买入成都农商银行新存单1亿60天",
+      "businessType": "cd_buy",
+      "direction": "outflow",
+      "counterpartyId": null,
+      "issuerId": "SIM-BANK-CDRCB",
+      "targetYuan": 100000000,
+      "termsNote": "模拟计划；金额、代码、期限及行情均非真实交易数据",
+      "repoTerms": null,
+      "tradeDate": "2026-10-19",
+      "settlementDate": "2026-10-19",
+      "securityId": "SIM-CDRCB-CD-60",
+      "marketTier": "secondary"
+    },
+    {
+      "label": "银行间正回购融资42.6亿1天",
+      "businessType": "interbank_repo_financing",
+      "direction": "inflow",
+      "counterpartyId": null,
+      "issuerId": null,
+      "targetYuan": 4260000000,
+      "termsNote": "模拟计划；金额、代码、期限及行情均非真实交易数据",
+      "repoTerms": {
+        "market": "INTERBANK",
+        "tenorDays": 1,
+        "annualRate": null
+      },
+      "tradeDate": "2026-10-19",
+      "settlementDate": "2026-10-19",
+      "securityId": null,
+      "marketTier": null
+    }
+  ]
+}
