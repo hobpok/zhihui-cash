@@ -3,7 +3,7 @@
 // these calculations is an authoritative balance, financing commitment, or
 // substitute for the dispatch-time check.
 import { BUSINESS_TYPES,BUSINESS_DIRECTIONS,isFinancing,isExchangeRepo,isSecuritySale,unitFor,windowStatus,
-  EXCHANGE_REPO_MAX_ORDER_YUAN,EXCHANGE_REPO_TENORS } from './business.js';
+  EXCHANGE_REPO_MAX_ORDER_YUAN,EXCHANGE_REPO_TENORS,isIndivisible,indivisibleAmountIssue } from './business.js';
 import { deriveTemplateExposure,bankIdForPlan } from './initial-data.js';
 import { coreRulesEnabled,evaluateCoreRules } from './core-rules.js';
 export const DEMO_UNIT_YUAN = 1000000;
@@ -15,7 +15,7 @@ export const MAX_RETAINED_CANDIDATES = 20;
 // At most 64 actions, each with at most 53 safe-integer unit positions, can
 // require a binary search. Keep this separate from order/candidate budgets.
 const MAX_PARTIAL_EVALUATIONS = 4096;
-const PARTIAL_OUTFLOW_TYPES = new Set(['reverse_repo','exchange_repo_lending','deposit','cd_buy','bond_buy']);
+const PARTIAL_OUTFLOW_TYPES = new Set(['reverse_repo','exchange_repo_lending','cd_buy','bond_buy']);
 const DEFAULT_PREFERENCES = ['settlement_safety', 'fewer_warnings', 'metric_headroom'];
 const OPTIONAL_PREFERENCES = ['reverse_repo_first','liquidity_last'];
 const REVERSE_REPO_TYPES = new Set(['reverse_repo','exchange_repo_lending']);
@@ -424,6 +424,12 @@ function evaluate(state, facts, actions, id, split = null) {
       }
     }
     const repoChecks = [];
+    const atomicIssue = indivisibleAmountIssue(plan,planBalance,amount);
+    if (atomicIssue) {
+      blocked = true;
+      repoChecks.push({ruleId:'DEPOSIT-WHOLE',name:'存款整笔执行',result:'block',reason:atomicIssue});
+      conflicts.push(atomicIssue);
+    }
     let settlementResult = 'not_applicable';
     let settlementRequiredYuan = null, settlementFeeYuan = null;
     if (isFinancing(plan.businessType) || isExchangeRepo(plan.businessType)) {
@@ -946,6 +952,7 @@ export function calculate(state, options = {}) {
           actions.length > 1 ? 'split_grid_unexplored' : null,
         exploredCandidates };
       if (actions.length === 1 && actions[0].plan.direction === 'outflow' &&
+        !isIndivisible(actions[0].plan.businessType) &&
         (facts.today === null || settlementDateFor(actions[0].plan,facts.today) === null) &&
         !(isExchangeRepo(actions[0].plan.businessType) && actions[0].amount > EXCHANGE_REPO_MAX_ORDER_YUAN) &&
         actions[0].amount > unitFor(actions[0].plan.businessType) && facts.cash !== null && facts.input.bufferYuan !== null &&

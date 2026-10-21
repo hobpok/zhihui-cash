@@ -39,6 +39,7 @@
 !/app/default-scenario.js
 !/app/default-scenario.test.js
 !/app/deposit-eight.test.js
+!/app/deposit-atomic.test.js
 !/app/dispatch-diagnostics.test.js
 !/app/display-labels.js
 !/app/engine-diagnostics.test.js
@@ -48,6 +49,8 @@
 !/app/execution-diagnostics.test.js
 !/app/execution.js
 !/app/execution.test.js
+!/app/execution-order-ui.js
+!/app/execution-order-ui.test.js
 !/app/index.html
 !/app/initial-data.js
 !/app/initial-data.test.js

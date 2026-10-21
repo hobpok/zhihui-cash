@@ -92,8 +92,15 @@ test('S5 existing fills and locks remain visible; financing cap blocks main, alt
   assert.equal(reverse.lockedYuan,3*E);
   assert.equal(result.alternative.requiresTargetChange,true);
   assert.ok(result.limitations.some(row => row.ruleId === 'C02' && row.headroomYuan < 0));
+  // The actual snapshot cannot arrange this indivisible deposit yet. Its whole
+  // six yi becomes feasible only after the pending two yi funding fill/receipt.
   assert.ok(result.alternative.unmetTargets.some(row =>
-    row.targetYuan === 6*E && row.suggestedYuan === 4*E && row.unarrangedYuan === 2*E));
+    row.targetYuan === 6*E && row.suggestedYuan === 0 && row.unarrangedYuan === 6*E));
+  assert.equal(result.alternative.conditionalUnarrangedYuan,6*E);
+  const conditionalDeposit=result.alternative.executionPath.filter(step=>
+    step.nominalYuan===6*E && step.kind==='conditional_step');
+  assert.equal(conditionalDeposit.length,1);
+  assert.ok(result.alternative.requiresInFlightFinancingReceipt);
 });
 
 test('omitted plan IDs reuse the unique S3/S5 existing plans and default to P04 alternative', () => {

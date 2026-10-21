@@ -4,7 +4,7 @@ import { createStore } from './storage.js';
 import { MAX_BODY_BYTES, validateDocument, validateMutation } from './contracts.js';
 import { aiService } from './ai-service.js';
 import { createRequestObservability } from './observability.js';
-import { RESET_RELEASE } from '../app/release-version.js';
+import { APP_RELEASE, RESET_RELEASE } from '../app/release-version.js';
 import { dialogueStreamResponse } from './dialogue-stream-response.js';
 
 const streamTasks = new WeakMap();
@@ -99,7 +99,7 @@ export function createApi({ authenticate = authenticateSession, storeFactory = c
       if (request.headers.get('x-workspace-user') !== member.id) throw new HttpError(409, 'SESSION_CHANGED');
       if (url.pathname === '/api/workspace/upgrade') {
         if (request.method !== 'POST') throw new HttpError(405, 'METHOD_NOT_ALLOWED');
-        if (request.headers.get('x-app-release') !== RESET_RELEASE) throw new HttpError(409, 'RELEASE_REQUIRED');
+        if (request.headers.get('x-app-release') !== APP_RELEASE) throw new HttpError(409, 'RELEASE_REQUIRED');
         const body = await readBody(request, 256);
         if (!body || typeof body !== 'object' || Array.isArray(body) ||
             Object.keys(body).sort().join(',') !== 'expectedRunRevision,expectedTemplateRevision' ||
@@ -107,7 +107,8 @@ export function createApi({ authenticate = authenticateSession, storeFactory = c
             !Number.isSafeInteger(body.expectedTemplateRevision) || body.expectedTemplateRevision < 0) {
           throw new HttpError(400, 'INVALID_INPUT');
         }
-        return response(200, await store.upgradeRelease(member.id, body));
+        const upgraded = await store.upgradeRelease(member.id, body);
+        return response(200, { ...upgraded, release: APP_RELEASE, resetRelease: RESET_RELEASE });
       }
       if (url.pathname === '/api/workspace/backups') {
         if (request.method !== 'GET') throw new HttpError(405, 'METHOD_NOT_ALLOWED');
@@ -187,7 +188,7 @@ export function createApi({ authenticate = authenticateSession, storeFactory = c
         return response(200, { document });
       }
       const deleting = request.method === 'DELETE';
-      if (kind !== 'settings' && request.headers.get('x-app-release') !== RESET_RELEASE) {
+      if (kind !== 'settings' && request.headers.get('x-app-release') !== APP_RELEASE) {
         throw new HttpError(409, 'RELEASE_REQUIRED');
       }
       const mutation = validateMutation(await readBody(request), deleting);

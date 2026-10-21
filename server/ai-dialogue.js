@@ -71,9 +71,13 @@ function requestsDraftOrder(message) {
   const currentRequest = message.replace(/(?:不(?:需要|用|要|做|再|进行|安排)?|别|勿|无需|暂不(?:要|做)?)拟单|(?:确认|审核|批准|同意|决定)(?:之)?后再拟单/g, '');
   return /拟单/.test(currentRequest);
 }
+function asksDepositExecution(message) {
+  return /(?:存款.{0,30}(?:存单|CD)|(?:存单|CD).{0,30}存款)/i.test(message) &&
+    /(?:排序|顺序|先后|交换|换序|反过来|为什么|为何|腾空间)/.test(message) ||
+    /存款.{0,20}(?:拆分|整笔|分批|部分执行|一部分|全做|全不做)/.test(message);
+}
 function requiresCompletionSimulation(message) {
-  const depositCdOrderFollowup = /(?:存款.{0,24}存单|存单.{0,24}存款)/.test(message) &&
-    /(?:排序|顺序|先后|交换|换序|反过来|为什么|为何)/.test(message);
+  const depositCdOrderFollowup = asksDepositExecution(message);
   if (depositCdOrderFollowup && !arrangesFixedTrade(message) &&
       !requiresPlanningResult(routingRequest(message))) return true;
   return /(?:全部|所有|全数|全都).{0,12}(?:完成|执行|成交)|(?:完成|执行完).{0,8}(?:全部|所有)/.test(message) &&
@@ -534,15 +538,43 @@ function formatEvidence(item) {
 }
 
 function formatSimulationAnswer(result, request) {
-  const asksDepositOrder = /(?:存款.{0,24}存单|存单.{0,24}存款)/.test(request) &&
-    /(?:排序|顺序|先后|交换|换序|反过来|为什么|为何)/.test(request);
+  const asksDepositOrder = asksDepositExecution(request);
   const asksFinalCash = /(?:实际(?:账户)?现金|头寸|C02|现金比例)/.test(request) &&
     /(?:全部|所有|全数|全都|结算后|完成后)/.test(request);
   const lines = [];
   if (asksDepositOrder) {
     const comparisons = Array.isArray(result?.depositOrderEvidence) ? result.depositOrderEvidence : [];
     for (const row of comparisons) {
-      if (row?.orderComparable === false) continue;
+      const ratioAt = amount => Number.isSafeInteger(amount) &&
+        Number.isSafeInteger(row.quarterlyNetAssetsYuan) && row.quarterlyNetAssetsYuan > 0
+        ? percent(amount / row.quarterlyNetAssetsYuan) : '待核实';
+      if (row?.orderComparable === false) {
+        const bank = cleanDisplayText(row.bankLabel, 80) || '该银行';
+        lines.push(`${bank}相关存款或存单已有成交或在途，不能按两笔均未成交重做换序假设。${yi(row.openingExposureYuan) ? `当前计量敞口${yi(row.openingExposureYuan)}（${ratioAt(row.openingExposureYuan)}），含已下达买入预占，卖出仅按实际成交释放。` : ''}`);
+        for (const [kind, statuses] of [['存款', row.depositExecution], ['CD买入', row.cdBuyExecution]]) {
+          for (const status of Array.isArray(statuses) ? statuses : []) {
+            if (![status.targetYuan, status.filledYuan, status.lockedYuan].every(Number.isSafeInteger)) continue;
+            lines.push(`${kind}意向${yi(status.targetYuan)}，已成交${yi(status.filledYuan)}，在途未成交${yi(status.lockedYuan)}。`);
+          }
+        }
+        lines.push('在途预占用于防止超额下达，不证明前置交易已完成；依赖先存款的CD买入须等存款整笔实际成交，依赖卖CD的存款须等所需卖出实际成交，再按最新规则复核。不要重复新增或下达同一笔。');
+        continue;
+      }
+      if (row?.mode === 'cd_sale_before_deposit') {
+        const bank = cleanDisplayText(row.bankLabel, 80) || '该银行';
+        const current = yi(row.openingExposureYuan), deposit = yi(row.depositYuan);
+        const nav = yi(row.quarterlyNetAssetsYuan), direct = yi(row.depositFirstGate?.afterYuan);
+        const sale = yi(row.saleRemainingYuan), afterSale = yi(row.saleFirstExposureYuan);
+        const afterDeposit = yi(row.saleFirstDepositGate?.afterYuan), limit = yi(row.limitYuan);
+        const limitRatio = percent(row.thresholdNumerator / row.thresholdDenominator);
+        if (![current, deposit, nav, direct, sale, afterSale, afterDeposit, limit, limitRatio].every(Boolean)) continue;
+        lines.push(`${bank}当前计量公司敞口${current}／该行季度净资产${nav}＝${ratioAt(row.openingExposureYuan)}（含已下达买入预占，卖出仅按实际成交释放），新增存款${limitRatio}闸门上限${limit}。直接做整笔存款${deposit}后为${direct}（${ratioAt(row.depositFirstGate.afterYuan)}），${row.depositFirstGate.result === 'block' ? '超过上限，这笔存款被阻断' : row.depositFirstGate.result === 'pass' ? '这笔存款通过该闸门' : '闸门结果待核实'}。`);
+        if (row.saleRemainingYuan > 0) {
+          lines.push(`先卖CD${sale}并实际成交后，公司敞口才降至${afterSale}（${ratioAt(row.saleFirstExposureYuan)}）；再做整笔存款${deposit}后为${afterDeposit}（${ratioAt(row.saleFirstDepositGate.afterYuan)}），${row.saleFirstDepositGate.result === 'pass' ? row.saleFirstDepositGate.afterYuan === row.limitYuan ? '恰好等于上限，允许' : '通过该存款闸门' : row.saleFirstDepositGate.result === 'block' ? '仍超过上限，这笔存款被阻断' : '闸门结果待核实'}。反过来先存后卖，首笔存款仍按直接存款结果核验，不能用后续卖出的期末值提前放行。`);
+        } else lines.push('相关CD卖出已全部成交，释放的敞口已计入上述当前值，不再重复扣减；该存款仍须按最新快照独立校验。');
+        if (row.saleLockedYuan > 0) lines.push(`其中卖CD${yi(row.saleLockedYuan)}仍在途；已下达或已接收不算成交，不能据此释放敞口。`);
+        continue;
+      }
       const opening = yi(row?.openingExposureYuan);
       const deposit = yi(row?.depositYuan);
       const cd = yi(row?.cdYuan);
@@ -566,10 +598,12 @@ function formatSimulationAnswer(result, request) {
         '新增存款能否通过该闸门尚无足够资料';
       lines.push(`按本轮快照对这两笔交易作局部换序测算：${bank}季度净资产${nav}，新增存款的${ratio}闸门对应合计敞口上限${threshold}。原敞口${opening}；先做存款${deposit}后为${depositFirst}，${firstGateText}；再买存单${cd}后为${depositFirstFinal}。存单本身不按新增存款闸门阻断，仍须核验其他逐笔规则和付款条件。`);
       lines.push(`交换顺序则先买存单后敞口为${cdFirstIntermediate}，再做整笔存款后为${cdFirst}；${reverseGateText}。局部换序结果须结合完整路径中其他同银行交易及逐笔可用资金复核，不代表这些交易已经成交或可直接下达。`);
+      lines.push(`对应公司比例：原敞口${ratioAt(row.openingExposureYuan)}，先存款后${ratioAt(row.depositFirstExposureYuan)}，再买CD后${ratioAt(row.depositFirstFinalExposureYuan)}；换序先买CD后${ratioAt(row.cdFirstIntermediateExposureYuan)}，再存整笔后${ratioAt(row.cdFirstExposureYuan)}。`);
     }
     if (!lines.length) lines.push(comparisons.some(row=>row?.orderComparable === false)
       ? '相关存款或存单已有成交或在途，不能再按两笔均未成交的局部换序假设比较；须核对实际回报与逐笔规则。'
       : '本轮模拟未提供可核验的存款与存单换序比较；不能据终态指标推断互换顺序可行。请查看逐笔规则明细。');
+    lines.push('公式为（全公司货基同银行存款＋CD＋银行债）／该银行最近季度净资产。当前计量敞口含已下达买入预占，卖出仅按实际成交释放。每笔存款不可拆分，整笔全做或全不做，不能先做一部分绕过闸门；买CD增加分子但不触发存款专属闸门，仍受公司10%及无托管资格银行本基金存款＋CD／NAV≤5%等独立规则约束。前置交易必须实际成交，下达或接收不等于成交；付款还须独立核验实际账户现金。切换样例只换数据，不回退规则。以上是局部条件测算，须结合完整路径逐笔复核、重新计算和手动下达。');
     return lines.join('\n').slice(0, MAX_OUTPUT_CHARS);
   }
   if (asksFinalCash) {
@@ -984,6 +1018,7 @@ export async function invokeAiDialogue({ message, history, resolved, signal, too
     '你是智汇现金交易助手。只可查询和测算，不得确认、应用、审核、下达交易或发起外部请求。',
     '面向用户将计划金额称为“意向金额”，不要称“目标金额”。',
     '当前数据与规则用于合成演示，尚未核实为正式适用制度。新增存款后，全公司货基对该行存款、存单及银行债合计／银行净资产不得超过该银行配置上限（通常6%、批准提额为8%，以本轮工具返回值为准）；恰好等于上限允许。存单和银行债买入不受这条新增存款闸门限制，但仍受公司10%、基金集中度等其他规则约束。不存在独立的基金净值8%存款闸门，不能混淆基金与银行净资产分母。答复须区分演示测算与已发生的成交、到账事实。',
+    '每笔存款不可拆分，整笔全做或全不做，不能先存一部分绕过新增存款闸门。解释存款与CD买卖先后时，引用simulate_completion的本轮逐步金额与比例及哪笔存款被阻断：CD买入增加公司分子但不触发存款专属闸门，仍受公司10%和无托管资格银行本基金5%等独立规则约束；先卖CD腾空间必须实际成交，已下达、已接收都不算完成前置，实际付款现金另验。切换样例只换当前run数据，不回退规则或沿用旧run结论。不得把部分成交、仅条件模拟或期末达标说成当前已可整笔执行。',
     '询问现有指令是否存在合理顺序全部完成、存款与存单为何先后或交换顺序、或假设全部完成后的现金和指标，必须优先调用simulate_completion({})并引用最新结果。须分开说明当前直接推进的初筛、terminalStatus条件期末达标、pathStatus有界搜索是否实际找到全覆盖路径；缺数未知不视为通过，未找到路径不等于证明无解。全部完成是条件假设而非已成交事实。工具保留现有金额和期限，不自动优化融资/逆回购。',
     '先识别本轮问题。当前指标、现金比例与实际付款账户现金的概念解释须调用read_metrics({})并引用本轮调用ID；即使只解释概念，也不能把上一轮回复当成本轮数字依据。简单问题直接简答；新增或调整交易、以及现有受阻交易要求计算所需融资和余款逆回购时，必须优先调用plan_trades形成可核验方案。已有买券等固定计划在快照中，此类需求fixedTrades应为空，不得重复提交。点名现有目标的证券或发行行时，必须按plan_trades.existingFixedTargets或context.plans的证券ID对应关系，不得从期限相同的其他资产猜名称；不确定就不点名。经理未明确指定测算步长时省略unitYuan，由工具按业务交易单位精算，不得擅自改成1亿元网格。已全部成交的融资与逆回购是历史事实，不得把旧目标当成本轮金额、计划ID或期限。新增正回购融资未指定期限用1天，新增逆回购（融券）未指定期限用7天；已有未完成同类计划保留原期限，经理明确指定的期限优先。期限参与C09平均剩余期限测算。缺少精确对象等关键条件时，只问最少的澄清问题；仅缺逆回购期限时直接用默认7天测算。',
     '用户询问当前指令是否可顺利完成、指令卡在哪一步、现有交易为何下不去或如何继续执行时，必须调用diagnose_execution({})并引用最新调用ID；诊断已包含当前现金、C01/C02/C09、逐笔阻断、执行闸门与后续操作，纯问执行状态时不重复调用read_metrics。“下一步新增交易”等新拟单请求先按规划处理。当前指标通过不代表下一笔可执行；逐笔直接阻断不等于按前置交易依次完成仍不可行，不把首个受阻计划误称排单第一步。',

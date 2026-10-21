@@ -266,9 +266,11 @@ export function simulateDraft(snapshot, deltas, options = {}) {
   }, 0);
   // Hypothetical fill/receipt events are applied only to another isolated copy.
   // The candidate's appliedSaved retains the actual unfilled, uncredited facts.
+  // An indivisible deposit's unarranged nominal is not its funding shortfall:
+  // e.g. a six-yi ticket can be missing only two yi of in-flight financing.
   let staged = null;
   if (!options.executionSearch && !fullCoverage && terminalStatus === 'feasible' && pendingFinancingYuan > 0 &&
-      proposal?.unarrangedYuan > 0 && proposal.unarrangedYuan <= pendingFinancingYuan) {
+      proposal?.unarrangedYuan > 0) {
     try { staged = stageConfirmedInFlightFinancing(trial.appliedSaved); }
     catch { staged = null; }
   }

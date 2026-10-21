@@ -35,6 +35,17 @@ export const BUSINESS_DIRECTIONS = Object.freeze(Object.fromEntries(
 export const isFinancing = type => type === 'interbank_repo_financing' || type === 'exchange_repo_financing';
 export const isExchangeRepo = type => type === 'exchange_repo_financing' || type === 'exchange_repo_lending';
 export const isSecuritySale = type => type === 'cd_sell' || type === 'bond_sell';
+// Deposits are single tickets. Historical fills remain facts; any remaining
+// amount must be arranged, filled or cancelled in one operation.
+export const isIndivisible = type => type === 'deposit';
+export function indivisibleAmountIssue(plan, balance, amountYuan) {
+  if (!isIndivisible(plan?.businessType)) return null;
+  if (!balance || balance.lockedYuan > 0)
+    return '存款不可拆分：已有未成交占用，须先完成或整笔撤销原指令，再安排剩余存款';
+  const required = plan.targetYuan - balance.filledYuan;
+  return amountYuan === required ? null :
+    `存款不可拆分：本笔剩余${required}元须全部安排或都不安排，本次${amountYuan}元`;
+}
 export function unitFor(type) {
   const unit = BUSINESS_TYPES[type]?.unitYuan;
   if (!unit) throw new Error('未知业务类型');

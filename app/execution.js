@@ -1,5 +1,6 @@
 // Versioned, local simulation ledger. This is not the full 2A source snapshot adapter.
-import { isFinancing, isExchangeRepo, isSecuritySale, unitFor, windowStatus } from './business.js';
+import { isFinancing, isExchangeRepo, isSecuritySale, unitFor, windowStatus,
+  isIndivisible,indivisibleAmountIssue } from './business.js';
 export const EXECUTION_VERSION = 'simulation-execution-3';
 const copy = value => JSON.parse(JSON.stringify(value));
 // Object key order can change during cloud JSON serialization. Event order
@@ -224,6 +225,13 @@ export function executionSummary(execution, plans, { businessDate = null } = {})
 
 export function registerSend(execution, step, plan, approvalId, marketClock = null, authoritySource = null) {
   const next = copy(execution);
+  if (isIndivisible(plan.businessType)) {
+    const prior = Object.values(next.instructions).filter(i => i.planId === plan.planId && i.status !== 'rejected');
+    const filledYuan = prior.reduce((n,i) => add(n,i.filledYuan),0);
+    const lockedYuan = prior.reduce((n,i) => add(n,i.nominalYuan-i.filledYuan-i.cancelledYuan),0);
+    const issue = indivisibleAmountIssue(plan,{filledYuan,lockedYuan},step.nominalYuan);
+    if (issue) throw new Error(issue);
+  }
   if (Object.values(next.instructions).some(i => i.stepId === step.stepId && i.status !== 'rejected')) throw new Error('该指令已经发送或结果未知，不得重复发送');
   const instructionId = `${approvalId}-I-${next.nextInstruction++}`;
   if (next.openingFacts.some(f => openingSourceId(f) === instructionId)) throw new Error('新指令ID与期初来源冲突');
@@ -235,6 +243,7 @@ export function registerSend(execution, step, plan, approvalId, marketClock = nu
     status: 'unknown', approvalId, cancelRequestId: null, businessType: plan.businessType ?? (plan.direction === 'inflow' ? 'cd_sell' : 'reverse_repo'),
     repoMarket: plan.repoTerms?.market ?? null, repoTerms: plan.repoTerms ?? null,
     sentTime: marketClock?.time ?? null, sentTradingDay: marketClock?.isTradingDay ?? null,
+    machineConditions:copy(step.machineConditions ?? []),
     ...(authoritySource === 'calculated_skip_review' ? { authoritySource } : {}),
   };
   next.journal.push({ kind: 'send', instruction: copy(next.instructions[instructionId]) });
@@ -254,7 +263,7 @@ export function registerCancel(execution, instructionId) {
   return { execution: next, cancelRequestId };
 }
 
-function applyOne(next, event) {
+function applyOne(next, event, { historicalReplay = false } = {}) {
   const { type, instructionId } = event;
   const i = instructionId == null ? null : next.instructions[instructionId];
   if (instructionId != null && !i) throw new Error('回报指令不存在');
@@ -267,6 +276,9 @@ function applyOne(next, event) {
   } else if (type === 'fill') {
     if (i.status !== 'accepted' && i.status !== 'partial') throw new Error('成交须引用已接收指令');
     yuan(event.nominalYuan, '成交名义', true);
+    if (!historicalReplay && isIndivisible(i.businessType) &&
+        event.nominalYuan !== i.nominalYuan-i.filledYuan-i.cancelledYuan)
+      throw new Error('存款不可拆分：须一次成交该指令全部未成交余量');
     if (isExchangeRepo(i.businessType) && event.nominalYuan % unitFor(i.businessType) !== 0)
       throw new Error('交易所回购成交名义须符合交易单位');
     if (isExchangeRepo(i.businessType) && !singleDay(next)) {
@@ -313,6 +325,10 @@ function applyOne(next, event) {
     if (!c || c.instructionId !== instructionId || c.failed) throw new Error('撤改申请引用无效');
     if (!event.cancelSliceId || typeof event.cancelSliceId !== 'string') throw new Error('缺少撤改份额ID');
     yuan(event.nominalYuan, '撤改份额', true);
+    if (!historicalReplay && isIndivisible(i.businessType) &&
+        !c.slices[event.cancelSliceId]?.applied &&
+        event.nominalYuan !== i.nominalYuan-i.filledYuan-i.cancelledYuan)
+      throw new Error('存款不可拆分：须整笔撤销该指令全部未成交余量');
     if (isExchangeRepo(i.businessType) && event.nominalYuan % unitFor(i.businessType) !== 0)
       throw new Error('交易所回购撤改名义须符合交易单位');
     if (event.reservationId !== instructionId || event.releaseYuan !== event.nominalYuan)
@@ -346,7 +362,7 @@ function applyOne(next, event) {
   } else throw new Error('未知回报类型');
 }
 
-export function applyEvent(execution, event) {
+export function applyEvent(execution, event, { beforeApply } = {}) {
   const next = copy(execution);
   if (!event || typeof event !== 'object' || typeof event.eventId !== 'string' || !event.eventId ||
     !Number.isSafeInteger(event.sourceSequence) || event.sourceSequence < 1) throw new Error('回报ID或来源序号无效');
@@ -367,6 +383,7 @@ export function applyEvent(execution, event) {
   next.pending[event.sourceSequence] = copy(event);
   while (next.pending[next.sourceSequence + 1]) {
     const current = next.pending[next.sourceSequence + 1];
+    if (beforeApply) beforeApply(next,current);
     applyOne(next, current);
     delete next.pending[next.sourceSequence + 1];
     next.sourceSequence++;
@@ -396,6 +413,33 @@ export function validateExecution(execution, plans) {
     sourceIds.add(id);
   }
   for (const i of Object.values(execution.instructions)) {
+    if (i.machineConditions !== undefined) {
+      if (!Array.isArray(i.machineConditions)) throw new Error('指令成交依赖须为数组');
+      const kinds=['pledge_confirmed','quota_confirmed','exchange_window_open','funds_available','cash_available',
+        'settlement_capacity','filled','payable_cleared','previous_confirmed','sale_cash_available','holding_confirmed'];
+      const amounts=['pledge_confirmed','quota_confirmed','funds_available','cash_available',
+        'settlement_capacity','filled','holding_confirmed'];
+      for (const condition of i.machineConditions) {
+        if (!condition || typeof condition!=='object' || Array.isArray(condition) || !kinds.includes(condition.kind))
+          throw new Error('指令成交依赖类型无效');
+        if (amounts.includes(condition.kind)) yuan(condition.minimumYuan,'指令依赖最低金额');
+        if (condition.additionalYuan!==undefined) yuan(condition.additionalYuan,'指令依赖差额');
+        if (condition.planId!==undefined && !plans.some(plan=>plan.planId===condition.planId))
+          throw new Error('指令成交依赖计划引用无效');
+        if (['funds_available','filled','payable_cleared','sale_cash_available','holding_confirmed'].includes(condition.kind) &&
+            typeof condition.planId!=='string') throw new Error('指令成交依赖缺少计划引用');
+        if (condition.kind==='previous_confirmed' &&
+            (typeof condition.stepId!=='string' || !Object.values(execution.instructions).some(prior=>prior.stepId===condition.stepId)))
+          throw new Error('指令成交依赖前置步骤引用无效');
+        if (condition.basis!==undefined && !['fill','cash_available'].includes(condition.basis))
+          throw new Error('指令成交依赖计量口径无效');
+        if (condition.market!==undefined && !['INTERBANK','SSE','SZSE'].includes(condition.market))
+          throw new Error('指令成交依赖市场无效');
+        if (condition.kind==='settlement_capacity' &&
+            (typeof condition.valueDate!=='string' || !/^\d{4}-\d{2}-\d{2}$/.test(condition.valueDate)))
+          throw new Error('指令成交依赖交收日无效');
+      }
+    }
     if (i.authoritySource !== undefined && i.authoritySource !== 'calculated_skip_review')
       throw new Error('指令授权来源无效');
     for (const key of ['nominalYuan','filledYuan','cancelledYuan','settledYuan']) yuan(i[key], key);
@@ -433,7 +477,7 @@ export function validateExecution(execution, plans) {
     } else if (entry.kind === 'event') {
       const event = entry.event;
       if (event.sourceSequence !== replay.sourceSequence + 1 || replay.seen[event.eventId]) throw new Error('回报事件流水缺序或重复');
-      applyOne(replay, event);
+      applyOne(replay, event,{historicalReplay:true});
       replay.sourceSequence++;
       replay.seen[event.eventId] = copy(event);
     } else throw new Error('未知执行流水类型');
