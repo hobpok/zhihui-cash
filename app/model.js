@@ -5,7 +5,8 @@ import { normalizeInitialTemplate, legacyInitialTemplate,
   deriveTemplateExposure, bankIdForPlan, validatePlanSecurity, openingAccountCash } from './initial-data.js';
 import { createDefaultInitialTemplate } from './default-scenario.js';
 import { BUSINESS_DIRECTIONS, EXCHANGE_REPO_TENORS, EXCHANGE_REPO_MAX_ORDER_YUAN,
-  isFinancing, isExchangeRepo, isSecuritySale, unitFor, windowStatus, cancellationStatus } from './business.js';
+  isFinancing, isExchangeRepo, isSecuritySale, unitFor, windowStatus, cancellationStatus,
+  isIndivisible, indivisibleAmountIssue } from './business.js';
 import { coreRulesEnabled, evaluateCoreRules } from './core-rules.js';
 import { yi, amountDetail, coreRuleDetail, ratioLimitYuan } from './readiness-diagnostics.js';
 export const UI_VERSION = 'simulation-ui-3';
@@ -231,6 +232,8 @@ function readiness(state, item, { skipReview = false } = {}) {
     return { stepId: item.stepId, ready: false, reason: `本次金额须为正整数元且符合业务单位：${plan?.label ?? item.planId}本次${yi(item.nominalYuan)}、业务单位${plan ? unitFor(plan.businessType) : '未知'}元` };
   if (!plan || !balance || balance.arrangeableYuan < item.nominalYuan) return { stepId: item.stepId, ready: false,
     reason: `可安排名义金额不足：${plan?.label ?? item.planId}本次${yi(item.nominalYuan)}，${balance ? `当前可安排${yi(balance.arrangeableYuan)}，尚差${yi(item.nominalYuan-balance.arrangeableYuan)}` : '可安排余额未知'}；需重新建议和审核` };
+  const atomicIssue = indivisibleAmountIssue(plan,balance,item.nominalYuan);
+  if (atomicIssue) return {stepId:item.stepId,ready:false,reason:atomicIssue,ruleId:'DEPOSIT-WHOLE'};
   if (!saleHoldingReady(state, plan, item.nominalYuan))
     return { stepId: item.stepId, ready: false, reason: `证券品种、发行人或持仓可卖量未核实：${plan.label}（${plan.securityId ?? '证券代码未知'}）本次${yi(item.nominalYuan)}；可卖量或匹配关系须核实` };
   if (coreRulesEnabled(state)) {
@@ -412,6 +415,152 @@ export function deriveBatchReadiness(state) {
     }
   }
   return rows;
+}
+// Rule projection only. Never persist this synthetic execution: reservations
+// stay in the real cash summary, while bank/term exposures use actual fills.
+export function actualFilledRuleState(state) {
+  const execution = clone(state.execution);
+  for (const instruction of Object.values(execution.instructions)) {
+    if (instruction.status !== 'rejected')
+      instruction.nominalYuan = instruction.filledYuan + instruction.cancelledYuan;
+  }
+  return {...state,execution,summary:summary(state)};
+}
+const liveInstructionRemainder = instruction => instruction && instruction.status !== 'rejected' ?
+  instruction.nominalYuan-instruction.filledYuan-instruction.cancelledYuan : 0;
+const instructionConditions = (state,instruction) => instruction.machineConditions ??
+  (state.approval?.approvalId===instruction.approvalId ?
+    state.approval.proposalCopy?.steps?.find(step=>step.stepId===instruction.stepId)?.machineConditions : null) ?? [];
+const filledForPlan = (state,planId) => Object.values(state.execution.instructions)
+  .filter(i=>i.planId===planId).reduce((n,i)=>safeAdd(n,i.filledYuan),0);
+const depositGateFailure = (state,plan,amountYuan,projectedActions=[]) => {
+  const checked=evaluateCoreRules(state,{plan,amountYuan,projectedActions});
+  return [...checked.blocking,...checked.missing].find(row=>row.ruleId==='C05-DEPOSIT');
+};
+const withoutFilledInstruction = (actual,instructionId) => {
+  const execution=clone(actual.execution),instruction=execution.instructions[instructionId];
+  instruction.filledYuan=0;instruction.settledYuan=0;instruction.nominalYuan=instruction.cancelledYuan;
+  return {...actual,execution};
+};
+
+// The same dependency evidence drives both the investment-manager hints and
+// the fill gate. Merely sending or receiving a prerequisite never satisfies it.
+export function deriveExecutionOrderDependencies(state,instructionId,nominalYuan) {
+  const instruction=state.execution.instructions[instructionId];
+  if (!instruction || liveInstructionRemainder(instruction)<=0) return [];
+  const result=[];
+  const add=(planId,minimumYuan,reason,basis='fill')=>{
+    if (!planId || planId===instruction.planId || !Number.isSafeInteger(minimumYuan)) return;
+    const actualYuan=basis==='cash_available' ? Object.values(state.execution.cashFlows)
+      .filter(flow=>flow.type==='cash_available' && state.execution.instructions[flow.instructionId]?.planId===planId)
+      .reduce((n,flow)=>safeAdd(n,flow.amountYuan),0) : filledForPlan(state,planId);
+    const old=result.find(row=>row.planId===planId && row.basis===basis);
+    if (old) { old.minimumYuan=Math.max(old.minimumYuan,minimumYuan);old.ready=actualYuan>=old.minimumYuan;return; }
+    result.push({planId,minimumYuan,actualYuan,ready:actualYuan>=minimumYuan,reason,basis});
+  };
+  for (const condition of instructionConditions(state,instruction)) {
+    if (condition.kind==='filled' || condition.kind==='funds_available')
+      add(condition.planId,condition.minimumYuan,'计算前置条件',
+        condition.kind==='funds_available' && condition.basis!=='fill'?'cash_available':'fill');
+    if (condition.kind==='previous_confirmed') {
+      const prior=Object.values(state.execution.instructions).find(i=>i.stepId===condition.stepId && i.status!=='rejected');
+      if (prior) add(prior.planId,prior.nominalYuan-prior.cancelledYuan,'前置指令须先成交');
+    }
+  }
+  if (!coreRulesEnabled(state)) return result;
+  const actual=actualFilledRuleState(state), plan=state.plans.find(p=>p.planId===instruction.planId);
+  const bankId=bankIdForPlan(plan,state.initialData), amountYuan=nominalYuan ?? liveInstructionRemainder(instruction);
+  if (!bankId) return result;
+  // If this purchase would consume the headroom of a still executable deposit,
+  // that deposit must fill first. Only active sent deposits are protected here;
+  // cancelled/rejected tickets do not manufacture an execution dependency.
+  if (['cd_buy','bond_buy'].includes(plan.businessType)) {
+    for (const pending of Object.values(state.execution.instructions)) {
+      const deposit=state.plans.find(p=>p.planId===pending.planId);
+      const remainder=liveInstructionRemainder(pending);
+      if (deposit?.businessType!=='deposit' || (remainder<=0 && pending.filledYuan<=0) ||
+          bankIdForPlan(deposit,state.initialData)!==bankId) continue;
+      const beforeDeposit=remainder>0?actual:withoutFilledInstruction(actual,pending.instructionId);
+      const depositAmount=remainder>0?remainder:pending.filledYuan;
+      if (!depositGateFailure(beforeDeposit,deposit,depositAmount) &&
+          depositGateFailure(beforeDeposit,deposit,depositAmount,[{plan,amountYuan}]))
+        add(deposit.planId,safeAdd(filledForPlan(state,deposit.planId),remainder),
+          '先整笔存款成交，再买入占用同银行新增存款额度的证券');
+    }
+  }
+  // A deposit that still requires a sent sale to release exposure cannot use
+  // that sale's unfilled reservation as if it had already happened.
+  if (plan.businessType==='deposit' && depositGateFailure(actual,plan,amountYuan)) {
+    const sales=Object.values(state.execution.instructions).filter(i=>{
+      const sale=state.plans.find(p=>p.planId===i.planId);
+      return isSecuritySale(sale?.businessType) && liveInstructionRemainder(i)>0 &&
+        bankIdForPlan(sale,state.initialData)===bankId;
+    });
+    let projected=[];
+    for (const saleInstruction of sales) {
+      const sale=state.plans.find(p=>p.planId===saleInstruction.planId);
+      const remainder=liveInstructionRemainder(saleInstruction);
+      projected.push({plan:sale,amountYuan:remainder});
+      add(sale.planId,safeAdd(filledForPlan(state,sale.planId),remainder),
+        '先卖券成交释放同银行公司敞口，再办理存款');
+      if (!depositGateFailure(actual,plan,amountYuan,projected)) break;
+    }
+  }
+  if (plan.businessType==='deposit' && !depositGateFailure(actual,plan,amountYuan)) {
+    for (const saleInstruction of Object.values(state.execution.instructions)) {
+      const sale=state.plans.find(p=>p.planId===saleInstruction.planId);
+      if (!isSecuritySale(sale?.businessType) || saleInstruction.filledYuan<=0 ||
+          bankIdForPlan(sale,state.initialData)!==bankId) continue;
+      const beforeSale=withoutFilledInstruction(actual,saleInstruction.instructionId);
+      if (depositGateFailure(beforeSale,plan,amountYuan))
+        add(sale.planId,filledForPlan(state,sale.planId),
+          '先卖券成交释放同银行公司敞口，再办理存款');
+    }
+  }
+  return result;
+}
+
+export function executionFillReadiness(state,instructionId,nominalYuan) {
+  const instruction=state.execution.instructions[instructionId];
+  const remaining=liveInstructionRemainder(instruction);
+  const amountYuan=nominalYuan ?? remaining;
+  const dependencies=deriveExecutionOrderDependencies(state,instructionId,amountYuan);
+  const reject=(reason,ruleId)=>({ready:false,reason,ruleId,dependencies});
+  if (!instruction || !['accepted','partial'].includes(instruction.status) || remaining<=0)
+    return reject('成交须引用有未成交余额的已接收指令','EXECUTION-STATUS');
+  if (!Number.isSafeInteger(amountYuan) || amountYuan<=0 || amountYuan>remaining)
+    return reject('成交金额超过可用未成交份额或金额无效','EXECUTION-AMOUNT');
+  if (isIndivisible(instruction.businessType) && amountYuan!==remaining)
+    return reject('存款不可拆分：须一次成交该指令全部未成交余量','DEPOSIT-WHOLE');
+  const unmet=dependencies.find(row=>!row.ready);
+  if (unmet) {
+    const source=state.plans.find(p=>p.planId===unmet.planId);
+    return reject(`${unmet.reason}：${source?.label ?? unmet.planId}须${unmet.basis==='cash_available'?'到账':'累计成交'}${yi(unmet.minimumYuan)}，当前${yi(unmet.actualYuan)}`,'EXECUTION-DEPENDENCY');
+  }
+  if (coreRulesEnabled(state)) {
+    const plan=state.plans.find(p=>p.planId===instruction.planId);
+    const actual=actualFilledRuleState(state);
+    // The amount was already reserved when sent. Return only this fill's own
+    // reservation before assessing it again; all other cash commitments stay.
+    const available=actual.summary.availableYuan;
+    const reserved=plan.direction==='outflow' && (!plan.settlementDate || plan.settlementDate<=state.context.businessDate);
+    const cashYuan=available===null?null:reserved?safeAdd(available,amountYuan):available;
+    if (plan.direction==='outflow' && plan.settlementDate>state.context.businessDate)
+      actual.summary={...actual.summary,dateBalances:actual.summary.dateBalances.map(row=>
+        row.valueDate>=plan.settlementDate && row.availableYuan!==null ?
+          {...row,availableYuan:safeAdd(row.availableYuan,amountYuan)} : row)};
+    const checked=evaluateCoreRules(actual,{plan,amountYuan,cashYuan});
+    const failed=checked.missing[0] ?? checked.blocking[0];
+    if (failed) return reject(`成交前最新规则复核：${coreRuleDetail(failed)}`,failed.ruleId);
+  }
+  return {ready:true,reason:'成交前依赖及最新规则复核通过',dependencies};
+}
+function applyModelEvent(state,event) {
+  return applyEvent(state.execution,event,{beforeApply:(execution,current)=>{
+    if (current.type!=='fill') return;
+    const gate=executionFillReadiness({...state,execution},current.instructionId,current.nominalYuan);
+    if (!gate.ready) throw new Error(gate.reason);
+  }});
 }
 function summary(state) {
   if (state.progressId === 'initial') {
@@ -1090,6 +1239,8 @@ export function createModel(saved) {
           throw new Error('来源计算步骤已失效，请按当前指令重新计算');
         if (item.nominalYuan % unitFor(plan.businessType) !== 0)
           throw new Error('本次金额须符合该业务交易单位');
+        const atomicIssue = indivisibleAmountIssue(plan,balances.get(item.planId),item.nominalYuan);
+        if (atomicIssue) throw new Error(atomicIssue);
       }
       const next = clone(state), proposalId = `${state.context.runId}-PROP-${state.nextProposalId}`;
       const oldSteps = state.proposal?.steps ?? [];
@@ -1415,7 +1566,7 @@ export function createModel(saved) {
               }
             }
           } else event.cashFlowId = `${next.context.runId}-F-${sequence}`;
-          next.execution = applyEvent(next.execution,event).execution;
+          next.execution = applyModelEvent(next,event).execution;
           next.execution.nextLocalEvent++;
         };
         try {
@@ -1475,7 +1626,7 @@ export function createModel(saved) {
         event = { ...event, reportClockTime: state.marketClock.time };
       }
       const next = clone(state);
-      const result = applyEvent(next.execution, event);
+      const result = applyModelEvent(next,event);
       if (result.result.startsWith('duplicate')) return { ...view(), eventResult: result.result };
       next.execution = result.execution;
       if (event.eventId === `${state.context.runId}-E-${state.execution.nextLocalEvent}`) next.execution.nextLocalEvent++;

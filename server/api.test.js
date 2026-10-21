@@ -7,7 +7,7 @@ import { sqliteD1, seed } from './test-support/sqlite-d1.js';
 import { createModel } from '../app/model.js';
 import { createDefaultInitialTemplate } from '../app/default-scenario.js';
 import { createOriginalInitialTemplate } from '../app/original-scenario.js';
-import { RESET_RELEASE } from '../app/release-version.js';
+import { APP_RELEASE, RESET_RELEASE } from '../app/release-version.js';
 
 const config = { APP_ORIGIN: 'https://zhihui-cash.pages.dev',
   ACCESS_TEAM_DOMAIN: 'https://workspace-test.cloudflareaccess.com', ACCESS_AUD: 'a'.repeat(64) };
@@ -30,7 +30,7 @@ function sign(subject, email) {
 }
 async function call(ctx, user, path, method = 'GET', body, extra = {}) {
   const headers = { 'Cf-Access-Jwt-Assertion': ctx.tokens[user - 1], 'X-Workspace-User': `u${user}`,
-    'X-App-Release': RESET_RELEASE, ...extra };
+    'X-App-Release': APP_RELEASE, ...extra };
   if (method !== 'GET') { headers.Origin = config.APP_ORIGIN; headers['Content-Type'] = 'application/json'; }
   const res = await handle(new Request(`${config.APP_ORIGIN}${path}`, {
     method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -211,6 +211,38 @@ test('a previously upgraded account initializes the new sample once and preserve
   } finally { ctx.sqlite.close(); }
 });
 
+test('application release preserves accounts already initialized for the retained reset release', async () => {
+  const ctx = await setup();
+  try {
+    assert.notEqual(APP_RELEASE, RESET_RELEASE);
+    const original = createOriginalInitialTemplate();
+    const model = createModel(); model.startFromTemplate(original);
+    const run = JSON.parse(model.serialize());
+    await call(ctx, 1, '/api/documents/template/default', 'PUT', mutation('preserved-template', original));
+    await call(ctx, 1, '/api/documents/run/current', 'PUT', mutation('preserved-run', run));
+    ctx.sqlite.prepare(`INSERT INTO release_upgrades
+      (owner_id, release, expected_run_revision, expected_template_revision,
+       default_run_json, default_template_json) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run('u1', RESET_RELEASE, 1, 1, JSON.stringify(run), JSON.stringify(original));
+    const backupPath = `/api/workspace/backups/${RESET_RELEASE}`;
+    const backup = (await call(ctx, 1, backupPath)).body.backup;
+    for (let reopen = 0; reopen < 2; reopen++) {
+      const result = await call(ctx, 1, '/api/workspace/upgrade', 'POST',
+        { expectedRunRevision: 2, expectedTemplateRevision: 2 });
+      assert.equal(result.status, 200);
+      assert.equal(result.body.release, APP_RELEASE);
+      assert.equal(result.body.resetRelease, RESET_RELEASE);
+      assert.equal(result.body.upgraded, false);
+      assert.equal(result.body.run.revision, 2);
+      assert.equal(result.body.template.revision, 2);
+      assert.deepEqual(result.body.run.value, run);
+      assert.deepEqual(result.body.template.value, original);
+    }
+    assert.deepEqual((await call(ctx, 1, backupPath)).body.backup, backup);
+    assert.equal(ctx.sqlite.prepare('SELECT COUNT(*) AS n FROM release_upgrades WHERE owner_id = ?').get('u1').n, 1);
+  } finally { ctx.sqlite.close(); }
+});
+
 test('the immediately previous client cannot reset or overwrite the newly selected run and template', async () => {
   const ctx = await setup();
   try {
@@ -219,7 +251,7 @@ test('the immediately previous client cannot reset or overwrite the newly select
     const run = JSON.parse(model.serialize());
     await call(ctx, 1, '/api/documents/template/default', 'PUT', mutation('selected-template', original));
     await call(ctx, 1, '/api/documents/run/current', 'PUT', mutation('selected-run', run));
-    const oldHeaders = { 'X-App-Release': '6-0.27.1' };
+    const oldHeaders = { 'X-App-Release': '6-0.28.0' };
     for (const [kind, value] of [['run', run], ['template', original]]) {
       const id = kind === 'run' ? 'current' : 'default';
       const rejected = await call(ctx, 1, `/api/documents/${kind}/${id}`, 'PUT',

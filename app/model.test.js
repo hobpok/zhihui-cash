@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createModel, deriveBatchReadiness, deriveDispatchGroups, validateSaved, UI_VERSION } from './model.js';
 import { evaluateCurrentConcentration } from './engine.js';
+import {applyEvent} from './execution.js';
 import { createLegacySyntheticInitialTemplate as createSyntheticInitialTemplate,
   createSyntheticInitialTemplate as createSingleDayTemplate } from './initial-data.js';
 
@@ -362,8 +363,8 @@ test('nonzero fee can be calculated but cannot be sent without a cash allocation
   assert.throws(() => m.send(), /非零费用|没有当前可下达/);
 });
 
-test('partly filled and released amount gets a new approved step identity after replan', () => {
-  const m = createModel(); m.generateProposal('A'); m.approveProposal();
+test('historical partly filled deposit retains facts and its released residual gets a new approved whole step', () => {
+  let m = createModel(); m.generateProposal('A'); m.approveProposal();
   const [saleStep, depositStep] = m.getState().proposal.steps;
   const sale = m.send(saleStep.stepId).sentInstructionId;
   m.simulateEvent('accepted', { instructionId: sale });
@@ -372,7 +373,20 @@ test('partly filled and released amount gets a new approved step identity after 
   m.simulateEvent('cash_available', { instructionId: sale, amountYuan: 2 * yi, cashFlowId: 'sale-avail' });
   const deposit = m.send(depositStep.stepId).sentInstructionId;
   m.simulateEvent('accepted', { instructionId: deposit });
-  m.simulateEvent('fill', { instructionId: deposit, nominalYuan: 40000000 });
+  // A pre-rule partial fill remains an auditable fact on restore. New live
+  // deposit fills cannot manufacture this state.
+  const historical=JSON.parse(m.serialize());
+  historical.execution.instructions[deposit].businessType='reverse_repo';
+  historical.execution.journal.find(row=>row.kind==='send' && row.instruction.instructionId===deposit)
+    .instruction.businessType='reverse_repo';
+  const sequence=historical.execution.nextLocalEvent++;
+  historical.execution=applyEvent(historical.execution,{type:'fill',instructionId:deposit,
+    eventId:`${historical.context.runId}-E-${sequence}`,sourceSequence:historical.execution.sourceSequence+1,
+    nominalYuan:40000000,fillId:`${historical.context.runId}-OLD-PARTIAL`}).execution;
+  historical.execution.instructions[deposit].businessType='deposit';
+  historical.execution.journal.find(row=>row.kind==='send' && row.instruction.instructionId===deposit)
+    .instruction.businessType='deposit';
+  m=createModel(historical);
   const cancelRequestId = m.requestCancel(deposit).cancelRequestId;
   const evidence = { instructionId: deposit, cancelRequestId, cancelSliceId: 'part-1',
     nominalYuan: 60000000, reservationId: deposit, releaseYuan: 60000000 };

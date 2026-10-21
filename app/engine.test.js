@@ -648,18 +648,19 @@ test('ten independent synthetic actions form a cumulative ready group with an ex
   assert.equal(result.proposal.steps.some(s => s.machineConditions.some(c => c.kind === 'previous_confirmed')),false);
 });
 
-test('new deposit gate slices only the feasible amount and retains the full target', () => {
+test('new deposit gate leaves the whole deposit unarranged when its full amount cannot pass', () => {
   const template=createHistoricalComplexTemplate();
   template.draftPlans=template.draftPlans.slice(0,2);
   template.otherFundBankExposure.find(x=>x.bankId==='SIM-BANK-CDRCB').bondYuan=50000000;
   const model=createModel(); model.startFromTemplate(template);
   const result=calculate(model.getState());
   const deposit=result.proposal.steps.find(x=>x.planId===model.getState().plans[1].planId);
-  assert.equal(deposit.nominalYuan,550000000);
+  assert.equal(deposit,undefined);
   assert.equal(result.proposal.planCoverage[1].targetYuan,600000000);
-  assert.equal(result.proposal.planCoverage[1].unarrangedYuan,50000000);
-  assert.equal(result.trace.search.excludedActions.find(x=>x.planId===deposit.planId).status,
-    'partially_arranged');
+  assert.equal(result.proposal.planCoverage[1].unarrangedYuan,600000000);
+  assert.equal(result.proposal.planCoverage[1].suggestedYuan,0);
+  assert.equal(result.trace.search.excludedActions.find(x=>x.planId===model.getState().plans[1].planId).status,
+    'blocked_sequence');
 });
 
 test('a synthetic buy that relies on projected sale exposure waits for that sale fill', () => {

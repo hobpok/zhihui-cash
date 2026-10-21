@@ -4,7 +4,7 @@ import { createModel } from '../app/model.js';
 import { createApi } from './api.js';
 import { createAiService } from './ai-service.js';
 import { seed, sqliteD1 } from './test-support/sqlite-d1.js';
-import { RESET_RELEASE } from '../app/release-version.js';
+import { APP_RELEASE } from '../app/release-version.js';
 
 const origin = 'https://workspace.local.test';
 const request = (requestId, documentRevision = 1, message = '请解释头寸') =>
@@ -36,7 +36,7 @@ function setup({ dialogueInvoke = async () => reply, invoke = async () => reply,
   async function call(user, path, method = 'GET', body) {
     const response = await api(new Request(`${origin}${path}`, { method,
       headers: { Origin: origin, 'Content-Type': 'application/json', 'X-Test-Member': user,
-        'X-Workspace-User': user, 'X-App-Release': RESET_RELEASE },
+        'X-Workspace-User': user, 'X-App-Release': APP_RELEASE },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }), env);
     return { status: response.status, body: await response.json() };

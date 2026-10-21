@@ -48,7 +48,8 @@ test('company default preserves exact balance sheet, three banks, and background
   assert.equal(t.otherFundBankExposure.reduce((n,r)=>n+r.depositYuan+r.cdYuan+r.bondYuan+r.otherYuan,0),q(97));
   assert.equal(t.maturityCashEvents.length,1);assert.equal(t.maturityCashEvents[0].includedInOpeningCash,false);
   assert.equal(t.maturityCashEvents[0].sourcePositiveRepoWeightId,'TW-REPO-ADJUSTMENT');
-  assert.ok(!t.draftPlans.some(p=>p.businessType==='cd_sell'));
+  assert.equal(t.draftPlans.find(p=>p.businessType==='cd_sell').targetYuan,q(2));
+  assert.equal(t.draftPlans.find(p=>p.businessType==='cd_sell').direction,'inflow');
   assert.doesNotThrow(()=>normalizeInitialTemplate(t));
 });
 
@@ -64,7 +65,7 @@ test('opening includes due repo once in business measures while account remains 
   assert.deepEqual(s.coreRules.missing,[]);
 });
 
-for(const [code,deposit,cd,initial,threshold] of [['GZ',1,2,.079,.08],['JNRCB',2,1,.058,.06]]) {
+for(const [code,deposit,cd,initial,threshold] of [['JNRCB',2,1,.058,.06]]) {
   test(`${code} company gate allows equality after deposit and requires deposit before CD`,()=>{
     const s=opening(createDefaultInitialTemplate()),dep=find(s,'deposit',code),buy=find(s,'cd_buy',code);
     const check=(plan,n,actions=[])=>evaluateCoreRules(s,{plan,amountYuan:n,projectedActions:actions}).rows;
@@ -84,9 +85,22 @@ for(const [code,deposit,cd,initial,threshold] of [['GZ',1,2,.079,.08],['JNRCB',2
   });
 }
 
+test('Guangzhou starts at 7.9 percent and must sell CD two before depositing three at 8 percent',()=>{
+  const s=opening(createDefaultInitialTemplate()),dep=find(s,'deposit','GZ'),sale=find(s,'cd_sell','GZ');
+  assert.equal(dep.targetYuan,q(3));assert.equal(sale.targetYuan,q(2));
+  const gate=actions=>rule(evaluateCoreRules(s,{plan:dep,amountYuan:q(3),projectedActions:actions}).rows,'C05-DEPOSIT','SIM-BANK-GZ');
+  assert.equal(rule(s.coreRules.rows,'C05-DEPOSIT','SIM-BANK-GZ').currentValue,.079);
+  assert.equal(gate([]).projectedValue,.082);assert.equal(gate([]).result,'block');
+  assert.equal(gate([{plan:sale,amountYuan:q(2)-1}]).result,'block');
+  const after=gate([{plan:sale,amountYuan:q(2)}]);
+  assert.equal(after.projectedValue,.08);assert.equal(after.result,'pass');
+  assert.equal(evaluateCoreRules(s,{plan:dep,amountYuan:q(3),
+    projectedActions:[{plan:sale,amountYuan:q(2)}]}).rows.find(r=>r.ruleId==='C03'&&r.subjectId==='SIM-BANK-GZ').projectedValue,.042);
+});
+
 test('noncustody fund five percent gate remains independent from company limits',()=>{
-  const s=opening(createDefaultInitialTemplate()),buy=find(s,'cd_buy','GZ');
-  const check=n=>rule(evaluateCoreRules(s,{plan:buy,amountYuan:n}).rows,'C03','SIM-BANK-GZ');
+  const s=opening(createDefaultInitialTemplate()),buy=find(s,'cd_buy','JNRCB');
+  const check=n=>rule(evaluateCoreRules(s,{plan:buy,amountYuan:n}).rows,'C03','SIM-BANK-JNRCB');
   assert.equal(check(q(5)).projectedValue,.05);assert.equal(check(q(5)).result,'pass');
   assert.equal(check(q(5)+1).result,'block');
 });
@@ -100,18 +114,19 @@ test('six plans and due repayment complete using public model APIs with exact fi
   assert.deepEqual(r.final.cash,{accountCashYuan:q(5),businessAvailableYuan:q(5),payableReservedYuan:0,projectedEndOfDayYuan:q(5)});
   assert.equal(r.final.cashEventReceipts.length,1);assert.equal(r.final.cashEventReceipts[0].amountYuan,q(25));
   assert.equal(rule(r.final.coreRules,'C02').currentValue,.05);
-  assert.equal(rule(r.final.coreRules,'C09').numeratorYuan,q(46880));
-  assert.equal(rule(r.final.coreRules,'C09').denominatorYuan,q(551));
-  assert.equal(rule(r.final.coreRules,'C09').currentValue,46880/551);
-  for(const code of ['GZ','JNRCB']) assert.equal(rule(r.final.coreRules,'C03',`SIM-BANK-${code}`).currentValue,.046);
-  assert.equal(rule(r.final.coreRules,'C05','SIM-BANK-GZ').currentValue,.082);
+  assert.equal(rule(r.final.coreRules,'C09').numeratorYuan,q(46700));
+  assert.equal(rule(r.final.coreRules,'C09').denominatorYuan,q(549));
+  assert.equal(rule(r.final.coreRules,'C09').currentValue,46700/549);
+  assert.equal(rule(r.final.coreRules,'C03','SIM-BANK-GZ').currentValue,.042);
+  assert.equal(rule(r.final.coreRules,'C03','SIM-BANK-JNRCB').currentValue,.046);
+  assert.equal(rule(r.final.coreRules,'C05','SIM-BANK-GZ').currentValue,.08);
   assert.equal(rule(r.final.coreRules,'C05','SIM-BANK-JNRCB').currentValue,.061);
   assert.ok(r.final.coreRules.every(row=>['pass','not_applicable'].includes(row.result)));
-  assert.equal(q(5+51-25-1-2-2-1-20),q(5));
+  assert.equal(q(5+49+2-25-3-2-1-20),q(5));
   // The lifecycle's accepted order must retain both bank-specific prerequisites.
   const order=r.final.instructions.map(i=>r.final.plans.find(p=>p.planId===i.planId).label);
-  for(const name of ['广州银行','江南农商银行'])
-    assert.ok(order.findIndex(x=>x.startsWith(`存入${name}`))<order.findIndex(x=>x.startsWith(`买入${name}`)));
+  assert.ok(order.findIndex(x=>x.startsWith('卖出广州银行'))<order.findIndex(x=>x.startsWith('存入广州银行')));
+  assert.ok(order.findIndex(x=>x.startsWith('存入江南农商银行'))<order.findIndex(x=>x.startsWith('买入江南农商银行')));
 });
 
 test('former three-gates template remains a saved fact and is never replaced on restore',()=>{
@@ -143,6 +158,7 @@ test('legacy reset refresh stays narrowly scoped and never replaces saved templa
   const t=createDefaultInitialTemplate();
   assert.strictEqual(prepareInitialTemplateForReset(t),t);
   t.templateId='SIM-DEFAULT-COMPLEX-01';
+  t.revision=1;
   const f=t.draftPlans.find(p=>p.businessType==='interbank_repo_financing');
   f.label='银行间正回购融资17.6亿7天';f.targetYuan=q(17.6);f.repoTerms.tenorDays=7;
   assert.equal(prepareInitialTemplateForReset(t).draftPlans.at(-1).repoTerms.tenorDays,1);

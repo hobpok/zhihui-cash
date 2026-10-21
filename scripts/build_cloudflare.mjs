@@ -9,7 +9,7 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const version=APP_RELEASE;
 const output=resolve(root,'dist/cloudflare');
 const sources=[
- 'app/batch-layout.css','app/workbench.css','app/bootstrap.js','app/release-version.js','app/index.html','app/style.css','app/ui.js','app/calculation-controller.js','app/calculation-worker.js','app/metric-display.js','app/readiness-diagnostics.js','app/model.js','app/engine.js','app/execution.js','app/business.js','app/default-scenario.js','app/initial-data.js','app/initial-ui.js','app/core-rules.js','app/c-ui.js',
+ 'app/batch-layout.css','app/workbench.css','app/bootstrap.js','app/release-version.js','app/index.html','app/style.css','app/ui.js','app/execution-order-ui.js','app/calculation-controller.js','app/calculation-worker.js','app/metric-display.js','app/readiness-diagnostics.js','app/model.js','app/engine.js','app/execution.js','app/business.js','app/default-scenario.js','app/initial-data.js','app/initial-ui.js','app/core-rules.js','app/c-ui.js',
  'app/workspace-sync.js','app/workspace-ui.js','app/workspace.css','app/ai-proxy.js','app/analysis.js','app/analysis-ui.js','app/analysis.css','app/metric-catalog.js','app/display-labels.js',
  'app/ai-conversation.js','app/ai-draft.js','app/ai-ui.js','app/ai.css','app/planning.js','app/planning-solver.js','app/original-scenario.js',
  'docs/design/dense.html','docs/design/dense.css','docs/design/dense.js','docs/design/dense-data.js',

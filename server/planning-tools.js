@@ -237,9 +237,73 @@ function depositOrderEvidence(state) {
       depositFirstFinalExposureYuan: safeSum([depositFirstGate.afterYuan, cdYuan]),
       cdFirstIntermediateExposureYuan, cdFirstExposureYuan: cdFirstDepositGate.afterYuan,
       depositFirstGate, cdFirstDepositGate,
+      depositExecution: group.deposits.map(plan => ({ planId: safeId(plan.planId),
+        targetYuan: safeMoney(plan.targetYuan), filledYuan: safeMoney(balances.get(plan.planId)?.filledYuan),
+        lockedYuan: safeMoney(balances.get(plan.planId)?.lockedYuan) })),
+      cdBuyExecution: group.cds.map(plan => ({ planId: safeId(plan.planId),
+        targetYuan: safeMoney(plan.targetYuan), filledYuan: safeMoney(balances.get(plan.planId)?.filledYuan),
+        lockedYuan: safeMoney(balances.get(plan.planId)?.lockedYuan) })),
+      exposureBasis: 'sent_purchases_reserved; only_filled_sales_release_exposure',
       orderComparable: !committed,
       otherSameBankPlans: otherSameBankPlans.slice(0, 12),
       scope: 'pair_only_current_exposure; cd_sell_and_other_same_bank_steps_not_simulated_in_pair_comparison',
+    });
+  }
+  return rows.slice(0, 16);
+}
+
+// Keep sale prerequisites separate from the buy/deposit comparison: a sale
+// intention or accepted order never reduces the current exposure. Only fills
+// already included by buildCoreContext do so; the remaining sale is conditional.
+function depositSaleOrderEvidence(state) {
+  const context = buildCoreContext(state);
+  const balances = new Map((state.summary?.planBalances ?? []).map(row => [row.planId, row]));
+  const bankFor = plan => plan.issuerId ?? state.initialData?.securities?.find(row =>
+    row.securityId === plan.securityId)?.issuerBankId;
+  const rows = [];
+  for (const deposit of state.plans ?? []) {
+    if (deposit.businessType !== 'deposit') continue;
+    const bankId = bankFor(deposit);
+    const sales = state.plans.filter(plan => plan.businessType === 'cd_sell' && bankFor(plan) === bankId);
+    if (!sales.length) continue;
+    const bank = state.initialData.banks.find(row => row.bankId === bankId);
+    const amounts = context.bankAmounts.get(bankId);
+    const other = state.initialData.otherFundBankExposure?.find(row => row.bankId === bankId);
+    const exposed = [amounts?.depositYuan, amounts?.cdYuan, amounts?.bondYuan,
+      other?.depositYuan, other?.cdYuan, other?.bondYuan];
+    const openingExposureYuan = exposed.every(value => typeof value === 'bigint' ||
+      Number.isSafeInteger(value)) ? safeSum(exposed.map(Number)) : null;
+    const balance = balances.get(deposit.planId);
+    const depositYuan = safeMoney(balance?.arrangeableYuan);
+    const saleRemainingYuan = safeSum(sales.map(plan => balances.get(plan.planId)?.remainingYuan));
+    const saleFilledYuan = safeSum(sales.map(plan => balances.get(plan.planId)?.filledYuan));
+    const saleLockedYuan = safeSum(sales.map(plan => balances.get(plan.planId)?.lockedYuan));
+    const denominator = bank?.quarterEnd && bank.quarterEnd <= state.context.businessDate &&
+      Number.isSafeInteger(bank.quarterlyNetAssetsYuan) && bank.quarterlyNetAssetsYuan > 0
+      ? bank.quarterlyNetAssetsYuan : null;
+    const limitBps = bankDepositLimitBps(bank);
+    const limitYuan = denominator === null ? null : Number(BigInt(denominator) * BigInt(limitBps) / 10000n);
+    const saleFirstExposureYuan = openingExposureYuan === null || saleRemainingYuan === null
+      ? null : safeSum([openingExposureYuan, -saleRemainingYuan]);
+    const gate = beforeYuan => {
+      const afterYuan = safeSum([beforeYuan, depositYuan]);
+      return { ruleId: 'C05-DEPOSIT', result: afterYuan === null || limitYuan === null ||
+        beforeYuan < 0 ? 'missing' : afterYuan <= limitYuan ? 'pass' : 'block',
+        beforeYuan, afterYuan, limitYuan };
+    };
+    rows.push({ mode: 'cd_sale_before_deposit', bankId: safeId(bankId), bankLabel: boundedText(bank?.label, 80),
+      depositPlanId: safeId(deposit.planId), salePlanIds: sales.map(plan => safeId(plan.planId)),
+      openingExposureYuan, quarterlyNetAssetsYuan: denominator, limitYuan,
+      thresholdNumerator: limitBps / 100, thresholdDenominator: 100,
+      depositYuan, depositTargetYuan: safeMoney(deposit.targetYuan), depositIndivisible: true,
+      depositExecution: [{ planId: safeId(deposit.planId), targetYuan: safeMoney(deposit.targetYuan),
+        filledYuan: safeMoney(balance?.filledYuan), lockedYuan: safeMoney(balance?.lockedYuan) }],
+      saleRemainingYuan, saleFilledYuan, saleLockedYuan, saleFirstExposureYuan,
+      depositFirstGate: gate(openingExposureYuan), saleFirstDepositGate: gate(saleFirstExposureYuan),
+      orderComparable: Boolean(balance && balance.filledYuan === 0 && balance.lockedYuan === 0),
+      prerequisiteBasis: 'filled_only; accepted_or_sent_sale_does_not_release_exposure',
+      exposureBasis: 'sent_purchases_reserved; only_filled_sales_release_exposure',
+      scope: 'pair_only_current_exposure; other_same_bank_steps_and_independent_rules_require_execution_path',
     });
   }
   return rows.slice(0, 16);
@@ -318,7 +382,7 @@ const str = { type: 'string', minLength: 1, maxLength: 128 };
 export const PLANNING_TOOL_DEFINITIONS = Object.freeze([
   { type: 'function', function: { name: 'read_metrics', description: '读取当前只读指标、业务头寸和计划成交占用。',
     parameters: schema({}) } },
-  { type: 'function', function: { name: 'simulate_completion', description: '只读检查当前指令区全部计划是否存在可逐步完成的合理顺序，并分别报告当前直接推进、条件期末指标与有界执行路径。含C05-DEPOSIT公司货基新增存款闸门，按该银行默认6%／该行批准8%参数核验。无参数；不改原金额、期限或目标，不补记成交、不审核或下达。',
+  { type: 'function', function: { name: 'simulate_completion', description: '只读检查当前指令区全部计划是否存在可逐步完成的合理顺序，并分别报告当前直接推进、条件期末指标与有界执行路径。含C05-DEPOSIT公司货基新增存款闸门，按该银行默认6%／该行批准8%参数核验；存款整笔不可拆，并提供存款与CD买卖换序及实际成交前置证据。无参数；不改原金额、期限或目标，不补记成交、不审核或下达。',
     parameters: schema({}) } },
   { type: 'function', function: { name: 'diagnose_execution', description: '诊断现有未完成计划为何暂不能继续：对比当前指标与下一笔规则，逐笔检查未安排金额及阻断，区分卖券成交后的比例现金基数与实际账户到账、付款能力，说明快照/审核闸门与核实步骤。用户问下不去、未完成、为什么不能交易、到账付款或如何继续时应调用；当前指标全通过不代表下一笔可下达。只读，不补记回报、不审核、不下达。',
     parameters: schema({}) } },
@@ -543,13 +607,15 @@ export function createPlanningTools(saved, { requestId, documentRevision, notes 
     knowledge: {
       source: 'docs/ai/业务合同.md; docs/ai/知识库.md',
       mode: 'single-day-principal-v1 synthetic demo',
-      executionDiagnosis: '纯问未完成单为何阻断、下达失败、到账付款时调用diagnose_execution；现有单要求算融资和余款逆回购方案时优先调用plan_trades。当前规则通过不代表下一笔通过。已成交卖券立即改善比例现金基数；到账仅增加实际账户现金。若账户现金足以付款，不把待收卖券到账列为继续下达前提。核对已发生回报，再刷新、重算、重审并手动下达。',
+      executionDiagnosis: '纯问未完成单为何阻断、下达失败、到账付款时调用diagnose_execution；现有单要求算融资和余款逆回购方案时优先调用plan_trades。当前规则通过不代表下一笔通过。已成交卖券立即改善比例现金基数；到账仅增加实际账户现金。若账户现金足以付款，不把待收卖券到账列为继续下达前提。',
       rules: ['C01业务头寸非负','C02比例现金基数（含已成交待收卖券）加一年内政府债除NAV至少5%；账户现金和一年内政府债分别计入，不互相包含',
-        'C03-C08按现行主体及分母计算；C05-DEPOSIT仅新增存款后校验：（本基金＋公司其他货基）同银行存款＋存单＋银行债／该行季度净资产，默认6%、该行批准8%（banks.depositLimitBps=600或800），等于允许。演示8%为合成批准，未连接真实审批。存单买入不触发此闸门，仍计敞口并受其他适用规则约束','C09平均剩余期限最多90天；正回购融入资金的负债扣减与正回购加回期限权重抵消，融资期限1天/7天不单独改变分子；融资金额改变分母，逆回购期限权重计入分子'],
+        'C03-C08按主体及分母计算；C05-DEPOSIT仅新增存款后检验：全公司货基同银行存款＋CD＋银行债／该行季度净资产≤该行上限（默认6%、合成批准8%，depositLimitBps=600/800），等号允许。买CD增加分子但不触发此闸门，仍受公司10%及无托管资格银行本基金存款＋CD/NAV≤5%等独立约束',
+        '存款不可拆，整笔全做或全不做；卖CD实际成交才腾空间，下达或接收不算。付款另验账户现金；切样例只换数据不退规则，当前run重新测算',
+        'C09≤90天；正回购负债扣减与同额同期限加回抵消，融资期限不单独改变分子；融资金额改变分母，逆回购期限权重计入分子'],
       managerPreferences: [
         'P01经理指定CD及现券买卖为固定目标','P02未指定逆回购金额时在约束内安排余款',
         'P03明确指定逆回购金额不得静默修改','P04主方案保留已有逆回购，减少目标仅作需同意的备选',
-        'P05新增正回购融资未指定期限默认1天、新增逆回购（融券）未指定期限默认7天；已有未完成计划沿用原期限，不继承已完成历史期限；期限影响C09','P06先求最小必要融资，再在该水平下安排逆回购余款',
+        'P05新增融资默认1天、逆回购默认7天；已有未完成计划沿用原期限，不继承已完成期限；期限影响C09','P06先求最小必要融资，再在该水平下安排逆回购余款',
       ],
     },
     untrustedNotes: notes.slice(0, 500),
@@ -597,7 +663,9 @@ export function createPlanningTools(saved, { requestId, documentRevision, notes 
           projectedFinalCashYuan: signedMoney(simulated.projectedFinalCashYuan),
           projectedFinalAccountCashYuan: accountCashProjection.projectedFinalAccountCashYuan,
           accountCashProjection, cashRatioBasis,
-          depositOrderEvidence: depositOrderEvidence(state),
+          depositOrderEvidence: [...depositOrderEvidence(state), ...depositSaleOrderEvidence(state)],
+          depositExecutionPolicy: { indivisible: true, prerequisiteBasis: 'actual_fill_only',
+            note: '每笔存款按整笔意向校验，全做或全不做；卖CD只按已成交金额释放公司敞口，下达和接收不算成交。' },
           executionStatus: simulated.status === 'blocked' ? 'search_incomplete' : boundedText(simulated.status, 50),
           pathStatus: ['feasible','waiting_conditions','improving'].includes(simulated.status) ?
             inFlightPrerequisites.length || simulated.status !== 'feasible' ? 'conditional_candidate' :

@@ -86,7 +86,7 @@ export function createDefaultInitialTemplate({ businessDate = currentBusinessDat
     positiveRepos:[{weightId:'TW-REPO-ADJUSTMENT',label:'存续正回购调整（当日到期）',amountYuan:yuan(25),remainingTradingDays:0}],
   };
   const plan=(label,businessType,n,securityId=null,code=null,tenorDays=null)=>({
-    label,businessType,direction:businessType==='interbank_repo_financing'?'inflow':'outflow',
+    label,businessType,direction:['interbank_repo_financing','cd_sell'].includes(businessType)?'inflow':'outflow',
     counterpartyId:null,issuerId:code?`SIM-BANK-${code}`:null,targetYuan:yuan(n),
     termsNote:'模拟计划；金额、代码、期限及行情均非真实交易数据',
     repoTerms:tenorDays===null?null:{market:'INTERBANK',tenorDays,annualRate:null},
@@ -95,8 +95,8 @@ export function createDefaultInitialTemplate({ businessDate = currentBusinessDat
   });
   return normalizeInitialTemplate({
     templateVersion:INITIAL_TEMPLATE_VERSION,templateId:'SIM-DEFAULT-COMPANY-GATES-20261019',
-    label:'500亿基金公司级三银行与日终5亿现金样例',revision:1,demoMode:SINGLE_DAY_DEMO_MODE,
-    provenance:{kind:'synthetic',note:'2026-10-19公司级三银行本地模拟。农业银行存款25亿、存单25亿作为背景持仓；广州银行全公司存款＋存单＋债券／银行净资产从7.9%起步，新增存款1亿至8%后再买存单2亿；江南农商银行从5.8%起步，新增存款2亿至6%后再买存单1亿。两行无托管资格，本基金存款＋存单均须不超过NAV的5%。其余335亿为七家有托管资格、AAA背景银行的存单，每家不超过本基金NAV的15%。所有银行评级、资格、银行净资产、公司持仓、证券代码及期限均为合成参数，不代表真实银行资料、行情或制度全文。其他基金广州59亿、江南38亿不计入本基金500亿净资产。'},
+    label:'500亿基金公司级三银行与日终5亿现金样例',revision:2,demoMode:SINGLE_DAY_DEMO_MODE,
+    provenance:{kind:'synthetic',note:'2026-10-20公司级三银行顺序模拟。农业银行存款25亿、存单25亿作为背景持仓；广州银行全公司存款＋存单＋银行债／银行净资产从7.9%起步，直接新增存款3亿将到8.2%，须先卖存单2亿降至7.7%，再整笔存款3亿至8%；江南农商银行从5.8%起步，先整笔存款2亿至6%，再买存单1亿至6.1%。存款不得拆分，前置交易须成交，发送或接收不等于成交。两行无托管资格，本基金存款＋存单均须不超过NAV的5%。其余335亿为七家有托管资格、AAA背景银行的存单，每家不超过本基金NAV的15%。所有银行评级、资格、银行净资产、公司持仓、证券代码及期限均为合成参数，不代表真实银行资料、行情或制度全文。其他基金广州59亿、江南38亿不计入本基金500亿净资产。'},
     businessDate,portfolio:{portfolioId:'SIM-FUND-500',label:'模拟500亿货币基金',navYuan:yuan(500),
       accountCashYuan:yuan(5),netSubscriptionYuan:0,feeYuan:0,bufferYuan:0,legacyBankExposureYuan:null},
     banks,securities,holdings,termWeights:terms,
@@ -111,12 +111,12 @@ export function createDefaultInitialTemplate({ businessDate = currentBusinessDat
       includedInOpeningCash:false,sourceLiabilityWeightId:'TW-REPO-LIABILITY',
       sourcePositiveRepoWeightId:'TW-REPO-ADJUSTMENT'}],pendingSettlements:[],
     draftPlans:[
-      plan('存入广州银行1亿90天','deposit',1,'SIM-GZ-DEP-NEW','GZ'),
-      plan('买入广州银行新存单2亿90天','cd_buy',2,'SIM-GZ-CD-NEW','GZ'),
+      plan('卖出广州银行存单2亿90天','cd_sell',2,'SIM-GZ-CD-OLD','GZ'),
+      plan('存入广州银行3亿90天','deposit',3,'SIM-GZ-DEP-NEW','GZ'),
       plan('存入江南农商银行2亿90天','deposit',2,'SIM-JNRCB-DEP-NEW','JNRCB'),
       plan('买入江南农商银行新存单1亿90天','cd_buy',1,'SIM-JNRCB-CD-NEW','JNRCB'),
       plan('银行间逆回购20亿7天','reverse_repo',20,null,null,7),
-      plan('银行间正回购融资51亿1天','interbank_repo_financing',51,null,null,1),
+      plan('银行间正回购融资49亿1天','interbank_repo_financing',49,null,null,1),
     ],
   });
 }
