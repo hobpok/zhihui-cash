@@ -1,14 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createModel } from '../app/model.js';
-import { createDefaultInitialTemplate } from '../app/default-scenario.js';
+import { createBankOrderInitialTemplate } from '../app/default-scenario.js';
 import { evaluateCoreRules } from '../app/core-rules.js';
 import { calculateCurrentCashRequirement, createPlanningTools } from './planning-tools.js';
 
 const E = 100000000;
 const setup = ({ financing = 20 * E, sale = 2 * E } = {}) => {
   const model = createModel();
-  model.startFromTemplate(createDefaultInitialTemplate());
+  model.startFromTemplate(createBankOrderInitialTemplate());
   model.generateProposal();
   model.approveProposal();
   model.sendBatch();
@@ -148,7 +148,7 @@ test('missing C02 input or threshold never becomes a zero gap', () => {
 });
 
 test('a valid saved run with unknown NAV returns an honest insufficient_data result', () => {
-  const template = createDefaultInitialTemplate(); template.portfolio.navYuan = null;
+  const template = createBankOrderInitialTemplate(); template.portfolio.navYuan = null;
   const model = createModel(); model.startFromTemplate(template);
   const result = read(model);
   assert.equal(result.status, 'insufficient_data');
@@ -156,7 +156,7 @@ test('a valid saved run with unknown NAV returns an honest insufficient_data res
 });
 
 test('a valid saved run with a genuinely unknown dispatch report gives no definite amount', () => {
-  const model = createModel(); model.startFromTemplate(createDefaultInitialTemplate());
+  const model = createModel(); model.startFromTemplate(createBankOrderInitialTemplate());
   model.generateProposal(); model.approveProposal();
   model.sendBatch(null, { receiptMode: 'unknown', stopAtIndex: 0 });
   const result = read(model);

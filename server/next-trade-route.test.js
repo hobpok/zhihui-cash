@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { invokeAiDialogue } from './ai-dialogue.js';
 import { createPlanningTools } from './planning-tools.js';
 import { createModel } from '../app/model.js';
-import { createDefaultInitialTemplate } from '../app/default-scenario.js';
+import { createBankOrderInitialTemplate } from '../app/default-scenario.js';
 
 const E = 100_000_000;
 const resolved = {state:'real_ready',config:{mode:'real',provider:'deepseek',model:'deepseek-flash'},
@@ -12,7 +12,7 @@ const noProvider = () => { throw new Error('Next existing trade questions must n
 const query = '融资还需要成交多少才能下广州银行的存款存入单';
 function setup(financing = 20 * E, sale = 2 * E) {
   const model = createModel();
-  model.startFromTemplate(createDefaultInitialTemplate());
+  model.startFromTemplate(createBankOrderInitialTemplate());
   model.generateProposal(); model.approveProposal(); model.sendBatch();
   for (const instruction of Object.values(model.getState().execution.instructions)) {
     const amount = instruction.businessType === 'cd_sell' ? sale : financing;

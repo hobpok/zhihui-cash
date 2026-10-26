@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createModel } from '../app/model.js';
-import { createDefaultInitialTemplate } from '../app/default-scenario.js';
+import { createBankOrderInitialTemplate } from '../app/default-scenario.js';
 import { createPlanningTools } from './planning-tools.js';
 
 const E=100000000;
 function setup({financing=20*E,sale=2*E,financingTarget=49*E,templateChange=()=>{}}={}) {
-  const template=createDefaultInitialTemplate();
+  const template=createBankOrderInitialTemplate();
   template.draftPlans.find(x=>x.businessType==='interbank_repo_financing').targetYuan=financingTarget;
   templateChange(template);
   const m=createModel();m.startFromTemplate(template);m.generateProposal();m.approveProposal();m.sendBatch();
@@ -80,7 +80,7 @@ test('known existing financing capacity below the needed amount cannot be claime
   assert.ok(r.remainingBlockers.some(x=>x.kind==='financing_capacity'));
 });
 test('unknown send result gives no confident next-trade amount',()=>{
-  const m=createModel();m.startFromTemplate(createDefaultInitialTemplate());m.generateProposal();m.approveProposal();
+  const m=createModel();m.startFromTemplate(createBankOrderInitialTemplate());m.generateProposal();m.approveProposal();
   m.sendBatch(null,{receiptMode:'unknown',stopAtIndex:0});
   const r=assess(m);assert.equal(r.status,'insufficient_data');
   assert.equal(r.nextTradeRequirement.additionalFinancingFillYuan,null);
@@ -102,7 +102,7 @@ test('completed target reports no next dispatch rather than a manufactured fundi
   const r=assess(m);assert.equal(r.status,'complete');
 });
 test('unknown NAV is not a zero gap',()=>{
-  const m=createModel(),template=createDefaultInitialTemplate();template.portfolio.navYuan=null;
+  const m=createModel(),template=createBankOrderInitialTemplate();template.portfolio.navYuan=null;
   m.startFromTemplate(template);const r=assess(m);assert.equal(r.status,'insufficient_data');
   assert.equal(r.nextTradeRequirement.additionalFinancingFillYuan,null);
 });
@@ -113,7 +113,7 @@ test('tool requires an exact existing plan ID and rejects surplus fields',()=>{
 });
 
 test('unarranged existing financing is verified by calculation, send and fill on the private model',()=>{
-  const m=createModel();m.startFromTemplate(createDefaultInitialTemplate());
+  const m=createModel();m.startFromTemplate(createBankOrderInitialTemplate());
   const r=assess(m,'江南');
   assert.equal(r.nextTradeRequirement.additionalFinancingFillYuan,27*E);
   assert.equal(r.financing.verifiedFillYuan,27*E);

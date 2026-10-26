@@ -2,15 +2,15 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {setupInitialUI} from './initial-ui.js';
 import {createModel} from './model.js';
-import {createDefaultInitialTemplate,createRemediationInitialTemplate} from './default-scenario.js';
+import {createDefaultInitialTemplate,createBankOrderInitialTemplate,createRemediationInitialTemplate} from './default-scenario.js';
 import {createOriginalInitialTemplate} from './original-scenario.js';
 
 const TEMPLATE_KEY='zhihui-initial-template-v1',HISTORY_KEY='zhihui-run-history-v1';
-function harness(t,{failKey=null,savedTemplate=null}={}){
+function harness(t,{failKey=null,savedTemplate=null,savedRun=null}={}){
  const originalDocument=globalThis.document,handlers=[],nodes=new Map(),values=new Map();
  globalThis.document={addEventListener(type,fn){if(type==='click')handlers.push(fn);}};
  t.after(()=>{if(originalDocument===undefined)delete globalThis.document;else globalThis.document=originalDocument;});
- const model=createModel();model.startFromTemplate(createDefaultInitialTemplate());model.generateProposal('AUTO');
+ const model=createModel(savedRun??undefined);if(!savedRun){model.startFromTemplate();model.generateProposal('AUTO');}
  if(savedTemplate)values.set(TEMPLATE_KEY,JSON.stringify(savedTemplate));
  let failure=failKey;
  const writes=[],errors=[],staged=[],changes=[],screens=[];
@@ -29,20 +29,23 @@ function harness(t,{failKey=null,savedTemplate=null}={}){
   stopFailing:()=>{failure=null;}};
 }
 
-test('both built-in buttons immediately create independent runs, save templates and preserve each previous run once',t=>{
+test('preset-sale and original buttons create independent six- and nine-plan runs and preserve each previous run once',t=>{
  const h=harness(t);h.model.setPreferences(['liquidity_last']);const before=h.model.serialize();
- h.render();assert.match(h.$('initial-screen').innerHTML,/三项银行约束（默认）/);
+ h.render();assert.match(h.$('initial-screen').innerHTML,/三项银行约束（预设卖券）/);
  assert.match(h.$('initial-screen').innerHTML,/原始样例（零现金／成农商6%）/);
  h.clickPreset('original-sample');
  assert.deepEqual(h.errors,[]);
  assert.equal(h.model.getState().initialData.templateId,createOriginalInitialTemplate().templateId);
  assert.equal(h.model.getState().initialData.portfolio.accountCashYuan,0);
+ assert.equal(h.model.getState().plans.length,9);
  assert.notEqual(h.model.getState().context.runId,JSON.parse(before).context.runId);
  assert.equal(JSON.parse(h.values.get(HISTORY_KEY))[0].state,before);
  assert.deepEqual(JSON.parse(h.values.get(TEMPLATE_KEY)),h.ui.template());
  assert.match(h.$('initial-screen').innerHTML,/当前模板选择：原始样例（零现金／成农商6%）/);
  const originalRun=h.model.serialize();h.clickPreset('sample');
- assert.equal(h.model.getState().initialData.templateId,createDefaultInitialTemplate().templateId);
+ assert.equal(h.model.getState().initialData.templateId,createBankOrderInitialTemplate().templateId);
+ assert.equal(h.model.getState().plans.length,6);
+ assert.equal(h.model.getState().plans.filter(plan=>plan.businessType==='cd_sell').length,1);
  assert.equal(h.model.getState().initialData.portfolio.accountCashYuan,500000000);
  const history=JSON.parse(h.values.get(HISTORY_KEY));assert.equal(history.length,2);
  assert.equal(history[0].state,originalRun);assert.equal(history[1].state,before);
@@ -55,7 +58,7 @@ test('both built-in buttons immediately create independent runs, save templates 
 test('remediation preset omits the planned CD sale while retaining sellable GZ inventory and prior run history',t=>{
  const h=harness(t),defaultTemplate=createDefaultInitialTemplate(),originalTemplate=createOriginalInitialTemplate();
  const originalRun=h.model.serialize();
- h.render();assert.match(h.$('initial-screen').innerHTML,/补救案例（未预设卖券）/);
+ h.render();assert.match(h.$('initial-screen').innerHTML,/补救案例（默认，未预设卖券）/);
  h.clickPreset('remediation-sample');
  assert.deepEqual(h.errors,[]);
  const state=h.model.getState(),template=createRemediationInitialTemplate();
@@ -73,6 +76,44 @@ test('remediation preset omits the planned CD sale while retaining sellable GZ i
  assert.equal(JSON.parse(h.values.get(HISTORY_KEY))[0].state,originalRun);
  assert.equal(JSON.parse(h.values.get(TEMPLATE_KEY)).templateId,template.templateId);
  assert.equal(h.staged.length,1);assert.deepEqual(h.changes[0].run.initialData,h.staged[0]);
+});
+
+test('first use, storage reload and reset select the five-plan remediation default without overwriting storage or the run',t=>{
+ const h=harness(t),before=h.model.serialize();
+ const check=()=>{
+  assert.equal(h.ui.template().templateId,createRemediationInitialTemplate().templateId);
+  assert.equal(h.ui.template().draftPlans.length,5);
+  assert.equal(h.ui.template().draftPlans.some(plan=>plan.businessType==='cd_sell'),false);
+ };
+ check();h.render();
+ const html=h.$('initial-screen').innerHTML;
+ assert.match(html,/当前模板选择：补救案例（默认，未预设卖券）/);
+ assert.ok(html.indexOf('data-initial="remediation-sample"')<html.indexOf('data-initial="sample"'));
+ assert.ok(html.indexOf('data-initial="sample"')<html.indexOf('data-initial="original-sample"'));
+ h.ui.replaceTemplate(createBankOrderInitialTemplate());h.ui.reloadStorage();check();
+ h.ui.replaceTemplate(createOriginalInitialTemplate());h.ui.resetStorage();check();
+ assert.equal(h.model.serialize(),before);assert.deepEqual(h.writes,[]);
+ h.clickPreset('begin');
+ const state=h.model.getState();
+ assert.equal(state.initialData.templateId,createRemediationInitialTemplate().templateId);
+ assert.equal(state.plans.length,5);assert.equal(state.plans.some(plan=>plan.businessType==='cd_sell'),false);
+ assert.ok(state.initialData.holdings.find(holding=>holding.securityId==='SIM-GZ-CD-OLD').sellableYuan>=200000000);
+ assert.equal(JSON.parse(h.values.get(HISTORY_KEY))[0].state,before);
+});
+
+test('saved six-plan templates and runs remain authoritative on initialization and storage reload',t=>{
+ const oldTemplate=createBankOrderInitialTemplate({businessDate:'2026-10-19'});
+ oldTemplate.label='已保存的六笔模板';oldTemplate.revision=7;
+ const oldModel=createModel();oldModel.startFromTemplate(oldTemplate);oldModel.generateProposal('AUTO');
+ const savedRun=createModel(oldModel.serialize()).serialize(),h=harness(t,{savedTemplate:oldTemplate,savedRun});
+ assert.deepEqual(h.ui.template(),oldTemplate);assert.equal(h.model.serialize(),savedRun);
+ h.ui.reloadStorage();h.render();
+ assert.deepEqual(h.ui.template(),oldTemplate);assert.equal(h.model.serialize(),savedRun);
+ assert.equal(h.values.get(TEMPLATE_KEY),JSON.stringify(oldTemplate));assert.deepEqual(h.writes,[]);
+ assert.match(h.$('initial-screen').innerHTML,/当前模板选择：三项银行约束（预设卖券）/);
+ h.clickPreset('begin');assert.equal(h.model.getState().plans.length,6);
+ assert.deepEqual(h.model.getState().initialData,oldTemplate);
+ assert.equal(JSON.parse(h.values.get(HISTORY_KEY))[0].state,savedRun);
 });
 
 test('editing or replacing the template remains separate until manual new-run, and history restores the previous run',t=>{

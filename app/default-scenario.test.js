@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { createModel, validateSaved } from './model.js';
 import { evaluateCoreRules } from './core-rules.js';
 import { normalizeInitialTemplate } from './initial-data.js';
-import { createDefaultInitialTemplate, prepareInitialTemplateForReset } from './default-scenario.js';
+import { createDefaultInitialTemplate, createBankOrderInitialTemplate, createRemediationInitialTemplate, prepareInitialTemplateForReset } from './default-scenario.js';
 import { runLifecycle } from '../scripts/robustness-lifecycle.mjs';
 
 const E=100000000, q=n=>Math.round(n*E);
@@ -16,8 +16,36 @@ const opening=t=>{const m=createModel();m.startFromTemplate(t);return m.getState
 const find=(s,kind,code)=>s.plans.find(p=>p.businessType===kind && (!code||p.issuerId===`SIM-BANK-${code}`));
 const sum=rows=>rows.reduce((n,r)=>n+r.amountYuan,0);
 
-test('company default preserves exact balance sheet, three banks, and background term weights',()=>{
-  const t=createDefaultInitialTemplate({businessDate:'2026-10-19'});
+test('fresh default is the five-plan remediation scenario and preserves the optional six-plan preset',()=>{
+  const options={businessDate:'2026-10-26'},t=createDefaultInitialTemplate(options);
+  const old=createBankOrderInitialTemplate(options),oldSnapshot=structuredClone(old);
+  assert.deepEqual(t,createRemediationInitialTemplate(options));
+  assert.equal(t.templateId,'SIM-REMEDIATION-COMPANY-GATES-20261026');
+  assert.equal(t.draftPlans.length,5);assert.equal(t.draftPlans.some(p=>p.businessType==='cd_sell'),false);
+  assert.equal(old.draftPlans.length,6);assert.equal(old.draftPlans.filter(p=>p.businessType==='cd_sell').length,1);
+  assert.deepEqual(t.draftPlans,old.draftPlans.filter(p=>p.businessType!=='cd_sell'));
+  for(const field of ['portfolio','banks','securities','holdings','termWeights','otherFundBankExposure','maturityCashEvents'])
+    assert.deepEqual(t[field],old[field]);
+  assert.ok(t.holdings.find(h=>h.securityId==='SIM-GZ-CD-OLD').sellableYuan>=q(2));
+  t.holdings[0].amountYuan=0;
+  assert.deepEqual(old,oldSnapshot);assert.deepEqual(createBankOrderInitialTemplate(options),oldSnapshot);
+  const m=createModel();m.startFromTemplate();
+  assert.equal(m.getState().plans.length,5);assert.equal(m.getState().plans.some(p=>p.businessType==='cd_sell'),false);
+});
+
+test('saved six-plan runs retain their original template, plans and calculated facts',()=>{
+  const m=createModel();m.startFromTemplate(createBankOrderInitialTemplate({businessDate:'2026-10-19'}));
+  m.generateProposal('AUTO');const saved=m.serialize(),restored=createModel(saved);
+  const expected=JSON.parse(saved);
+  expected.execution.requiresRefresh=true;expected.execution.requiresReapproval=true;
+  assert.deepEqual(JSON.parse(restored.serialize()),expected);assert.equal(restored.getState().plans.length,6);
+  assert.equal(restored.getState().initialData.templateId,'SIM-DEFAULT-COMPANY-GATES-20261019');
+  assert.ok(restored.getState().plans.some(p=>p.businessType==='cd_sell'));
+  assert.deepEqual(validateSaved(JSON.parse(saved)),{ok:true,errors:[]});
+});
+
+test('preset-sale company scenario preserves exact balance sheet, three banks, and background term weights',()=>{
+  const t=createBankOrderInitialTemplate({businessDate:'2026-10-19'});
   assert.equal(t.templateId,'SIM-DEFAULT-COMPANY-GATES-20261019');
   assert.equal(t.draftPlans.length,6);
   assert.equal(t.portfolio.navYuan,q(500));assert.equal(t.portfolio.accountCashYuan,q(5));
@@ -86,7 +114,7 @@ for(const [code,deposit,cd,initial,threshold] of [['JNRCB',2,1,.058,.06]]) {
 }
 
 test('Guangzhou starts at 7.9 percent and must sell CD two before depositing three at 8 percent',()=>{
-  const s=opening(createDefaultInitialTemplate()),dep=find(s,'deposit','GZ'),sale=find(s,'cd_sell','GZ');
+  const s=opening(createBankOrderInitialTemplate()),dep=find(s,'deposit','GZ'),sale=find(s,'cd_sell','GZ');
   assert.equal(dep.targetYuan,q(3));assert.equal(sale.targetYuan,q(2));
   const gate=actions=>rule(evaluateCoreRules(s,{plan:dep,amountYuan:q(3),projectedActions:actions}).rows,'C05-DEPOSIT','SIM-BANK-GZ');
   assert.equal(rule(s.coreRules.rows,'C05-DEPOSIT','SIM-BANK-GZ').currentValue,.079);
@@ -106,7 +134,7 @@ test('noncustody fund five percent gate remains independent from company limits'
 });
 
 test('six plans and due repayment complete using public model APIs with exact final ratios',()=>{
-  const r=runLifecycle(createDefaultInitialTemplate());
+  const r=runLifecycle(createBankOrderInitialTemplate());
   assert.deepEqual(r.blocked,[]);assert.equal(r.final.completed,true);
   assert.deepEqual(r.validationSaved,{ok:true,errors:[]});
   assert.equal(r.final.instructions.length,6);assert.ok(r.final.plans.every(p=>p.remainingYuan===0));
@@ -150,7 +178,7 @@ test('new defaults follow UTC+8 date, while saved runs keep dates and facts',t=>
   assert.ok(fresh.maturityCashEvents.every(e=>e.dueDate===fresh.businessDate));
   const restored=createModel(saved).getState();
   assert.equal(restored.context.businessDate,'2026-10-19');
-  assert.equal(restored.initialData.templateId,'SIM-DEFAULT-COMPANY-GATES-20261019');
+  assert.equal(restored.initialData.templateId,'SIM-REMEDIATION-COMPANY-GATES-20261026');
   assert.ok(validateSaved(JSON.parse(saved)).ok);
 });
 

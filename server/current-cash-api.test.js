@@ -6,7 +6,7 @@ import {invokeAiDialogue} from './ai-dialogue.js';
 import {createStore} from './storage.js';
 import {sqliteD1,seed} from './test-support/sqlite-d1.js';
 import {createModel} from '../app/model.js';
-import {createDefaultInitialTemplate} from '../app/default-scenario.js';
+import {createBankOrderInitialTemplate} from '../app/default-scenario.js';
 import {APP_RELEASE} from '../app/release-version.js';
 
 test('current C02 gap completes through authenticated SSE, persists and replays without provider or run mutation',async()=>{
@@ -15,7 +15,7 @@ test('current C02 gap completes through authenticated SSE, persists and replays 
  seed(sqlite,'u1','gap@example.test');
  sqlite.prepare('INSERT INTO auth_credentials(member_id,username,salt,password_hash,iterations) VALUES(?,?,?,?,?)').run('u1','gap-user','test-salt','test-hash',100000);
  const env={DB:db,APP_ORIGIN:origin,AI_KEY_TEST:'local-test-placeholder',AI_ACCOUNT_CONFIG_JSON:JSON.stringify({u1:{mode:'real',provider:'deepseek',model:'deepseek-flash',keyBinding:'AI_KEY_TEST',dailyLimit:30,timeoutMs:5000}})};
- const model=createModel();model.startFromTemplate(createDefaultInitialTemplate());model.generateProposal();model.approveProposal();model.sendBatch();
+ const model=createModel();model.startFromTemplate(createBankOrderInitialTemplate());model.generateProposal();model.approveProposal();model.sendBatch();
  const instructions=Object.values(model.getState().execution.instructions);
  const financing=instructions.find(i=>i.businessType==='interbank_repo_financing');
  const sale=instructions.find(i=>i.businessType==='cd_sell');

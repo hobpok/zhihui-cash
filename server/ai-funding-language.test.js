@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import {invokeAiDialogue} from './ai-dialogue.js';
 import {createPlanningTools} from './planning-tools.js';
 import {createModel} from '../app/model.js';
-import {createDefaultInitialTemplate} from '../app/default-scenario.js';
+import {createBankOrderInitialTemplate} from '../app/default-scenario.js';
 
 const E=100_000_000;
 const resolved={state:'real_ready',config:{mode:'real',provider:'deepseek',model:'deepseek-flash'},
   credential:'synthetic-language-test'};
 function savedFixture(change=()=>{}) {
-  const template=createDefaultInitialTemplate({businessDate:'2026-10-25'});
+  const template=createBankOrderInitialTemplate({businessDate:'2026-10-25'});
   change(template);
   const model=createModel();model.startFromTemplate(template);
   model.generateProposal();model.approveProposal();model.sendBatch();

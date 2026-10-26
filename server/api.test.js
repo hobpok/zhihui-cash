@@ -180,9 +180,11 @@ test('a previously upgraded account initializes the new sample once and preserve
       { expectedRunRevision: 2, expectedTemplateRevision: 2 });
     assert.equal(upgraded.status, 200); assert.equal(upgraded.body.upgraded, true);
     assert.equal(upgraded.body.run.revision, 3); assert.equal(upgraded.body.template.revision, 3);
-    assert.equal(upgraded.body.template.value.templateId, 'SIM-DEFAULT-COMPANY-GATES-20261019');
-    assert.equal(upgraded.body.run.value.initialData.templateId, 'SIM-DEFAULT-COMPANY-GATES-20261019');
-    assert.equal(upgraded.body.run.value.plans.length, 6);
+    assert.equal(upgraded.body.template.value.templateId, 'SIM-REMEDIATION-COMPANY-GATES-20261026');
+    assert.equal(upgraded.body.run.value.initialData.templateId, 'SIM-REMEDIATION-COMPANY-GATES-20261026');
+    assert.equal(upgraded.body.run.value.plans.length, 5);
+    assert.ok(upgraded.body.run.value.plans.every(p => p.businessType !== 'cd_sell'));
+    assert.ok(upgraded.body.template.value.holdings.find(h => h.securityId === 'SIM-GZ-CD-OLD').sellableYuan > 0);
     const backupPath = `/api/workspace/backups/${RESET_RELEASE}`;
     const upgradeBackup = (await call(ctx, 1, backupPath)).body.backup;
     assert.equal(upgradeBackup.document.revision, 2);

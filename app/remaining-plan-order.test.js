@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createModel} from './model.js';
 import {calculate,evaluateSelectedSequence,remainingDepositOrderIssue} from './engine.js';
-import {createDefaultInitialTemplate} from './default-scenario.js';
+import {createBankOrderInitialTemplate} from './default-scenario.js';
 import {baseTemplate,plan,YI} from '../scripts/robustness-scenarios.mjs';
 
 const start = template => { const model=createModel();model.startFromTemplate(template);return model; };
@@ -13,7 +13,7 @@ const coverage = (state,p) => state.proposal.planCoverage.find(row=>row.planId==
 // Rebuild the retained six-plan revision without changing or migrating a saved
 // run. Its amounts are independent assertions of the old public sample.
 function oldSixTemplate() {
-  const t=createDefaultInitialTemplate({businessDate:'2026-10-24'});
+  const t=createBankOrderInitialTemplate({businessDate:'2026-10-24'});
   t.revision=1;
   t.draftPlans[0]={...t.draftPlans[1],label:'广州存款1亿',targetYuan:YI};
   t.draftPlans[1]={...t.draftPlans[3],label:'广州买存单2亿',issuerId:'SIM-BANK-GZ',
@@ -191,7 +191,7 @@ test('completion of the original financing restores all five unsent goals in the
 });
 
 test('new six-plan default and explicitly selected order retain their amounts and terms',()=>{
-  const t=createDefaultInitialTemplate({businessDate:'2026-10-24'}),model=start(t),state=model.generateProposal();
+  const t=createBankOrderInitialTemplate({businessDate:'2026-10-24'}),model=start(t),state=model.generateProposal();
   assert.equal(state.proposal.steps.length,6);
   assert.equal(state.proposal.unarrangedYuan,0);
   assert.deepEqual(state.initialData.draftPlans,t.draftPlans);

@@ -1,14 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createModel } from './model.js';
-import { createDefaultInitialTemplate } from './default-scenario.js';
+import { createBankOrderInitialTemplate } from './default-scenario.js';
 import { readPlanningSnapshot, solveFundingAndReverseRepo } from './planning.js';
 import { findRemediation } from './remediation.js';
 
 const E = 100000000;
 const settings = { executionSearch: { nodeLimit: 20000, candidateBudget: 128 } };
 function fixture(edit = () => {}, keepSale = false) {
-  const template = createDefaultInitialTemplate({ businessDate: '2026-10-26' });
+  const template = createBankOrderInitialTemplate({ businessDate: '2026-10-26' });
   if (!keepSale) template.draftPlans = template.draftPlans.filter(plan => plan.businessType !== 'cd_sell');
   edit(template);
   const model = createModel(); model.startFromTemplate(template);
