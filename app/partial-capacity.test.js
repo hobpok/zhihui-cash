@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createModel} from './model.js';
-import {createDefaultInitialTemplate} from './default-scenario.js';
+import {createBankOrderInitialTemplate} from './default-scenario.js';
 import {evaluateCoreRules} from './core-rules.js';
 import {evaluateSelectedSequence} from './engine.js';
 import {baseTemplate,createScenarios,plan,YI} from '../scripts/robustness-scenarios.mjs';
@@ -32,7 +32,7 @@ test('a cash-only reverse repo split cannot hide a smaller C02-compliant slice',
 });
 
 test('default six-plan partial financing leaves a dispatchable ten-yi reverse repo and retains the rest', () => {
-  const model=start(createDefaultInitialTemplate({businessDate:'2026-10-24'}));
+  const model=start(createBankOrderInitialTemplate({businessDate:'2026-10-24'}));
   model.generateProposal();model.approveProposal();
   for (const sent of model.sendBatch().results) {
     const instruction=model.getState().execution.instructions[sent.instructionId];

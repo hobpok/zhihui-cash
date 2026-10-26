@@ -34,7 +34,7 @@ export function prepareInitialTemplateForReset(template) {
 
 // Synthetic company-level deposit gates confirmed on 2026-10-19.
 // Bank names are labels; every qualification, rating and amount is illustrative.
-export function createDefaultInitialTemplate({ businessDate = currentBusinessDate() } = {}) {
+export function createBankOrderInitialTemplate({ businessDate = currentBusinessDate() } = {}) {
   const bank = (code, label, netAssetsYi=2000, custodyQualified=true, depositLimitBps=600) => ({
     bankId:`SIM-BANK-${code}`,label,custodyQualified,rating:'AAA',ratingAsOf:businessDate,
     quarterlyNetAssetsYuan:yuan(netAssetsYi),quarterEnd:'2026-06-30',depositLimitBps,
@@ -121,15 +121,20 @@ export function createDefaultInitialTemplate({ businessDate = currentBusinessDat
   });
 }
 
-// This companion preset keeps the default scenario's holdings and business
+// This preset keeps the bank-order scenario's holdings and business
 // inputs, while leaving the corrective sale for the proposal/AI to identify.
 export function createRemediationInitialTemplate({ businessDate = currentBusinessDate() } = {}) {
-  const template = createDefaultInitialTemplate({ businessDate });
+  const template = createBankOrderInitialTemplate({ businessDate });
   const remediation = structuredClone(template);
   remediation.templateId = 'SIM-REMEDIATION-COMPANY-GATES-20261026';
   remediation.label = '500亿基金公司级三银行补救案例（未预设卖券）';
   remediation.revision = 1;
-  remediation.provenance.note = '由默认三银行约束合成样例派生；保留可卖广州银行存单持仓，但计划中未预设卖券，供计算或AI提示补救交易。其余业务字段与默认样例一致；所有数据均为合成参数，不代表真实交易或制度全文。';
+  remediation.provenance.note = '由三银行约束（预设卖券）合成样例派生；保留可卖广州银行存单持仓，但计划中未预设卖券，供计算或AI提示补救交易。其余业务字段与预设卖券样例一致；所有数据均为合成参数，不代表真实交易或制度全文。';
   remediation.draftPlans = remediation.draftPlans.filter(plan => plan.businessType !== 'cd_sell');
   return normalizeInitialTemplate(remediation);
+}
+
+// Defaults apply only to fresh starts; saved runs and templates keep their facts.
+export function createDefaultInitialTemplate(options) {
+  return createRemediationInitialTemplate(options);
 }

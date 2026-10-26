@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createModel} from '../app/model.js';
-import {createDefaultInitialTemplate} from '../app/default-scenario.js';
+import {createBankOrderInitialTemplate} from '../app/default-scenario.js';
 import {createPlanningTools} from './planning-tools.js';
 import {invokeAiDialogue} from './ai-dialogue.js';
 
 const fixture=()=>{
   const model=createModel();
-  model.startFromTemplate(createDefaultInitialTemplate({businessDate:'2026-10-19'}));
+  model.startFromTemplate(createBankOrderInitialTemplate({businessDate:'2026-10-19'}));
   const before=model.serialize();
   const tools=createPlanningTools(JSON.parse(before),{requestId:'company-gates-local',documentRevision:1});
   return {model,before,tools};

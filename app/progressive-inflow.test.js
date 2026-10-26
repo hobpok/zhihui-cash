@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createModel,validateSaved} from './model.js';
-import {createDefaultInitialTemplate} from './default-scenario.js';
+import {createBankOrderInitialTemplate} from './default-scenario.js';
 import {evaluateCoreRules} from './core-rules.js';
 import {APP_RELEASE,RESET_RELEASE} from './release-version.js';
 import {baseTemplate,plan} from '../scripts/robustness-scenarios.mjs';
 
 const E=100000000;
-const setup=()=>{const m=createModel();m.startFromTemplate(createDefaultInitialTemplate());return m;};
+const setup=()=>{const m=createModel();m.startFromTemplate(createBankOrderInitialTemplate());return m;};
 const find=(s,kind)=>s.plans.find(p=>p.businessType===kind);
 const rules=(s,p,n)=>evaluateCoreRules(s,{plan:p,amountYuan:n});
 const row=(r,id)=>r.rows.find(x=>x.ruleId===id&&x.subjectId==='PORTFOLIO');
@@ -74,7 +74,7 @@ test('unknown cash, unavailable holdings and missing maturity cannot use the imp
   const m=setup(),s=m.getState(),p=find(s,'cd_sell');
   const missing=evaluateCoreRules(s,{plan:p,amountYuan:2*E,cashYuan:null});
   assert.ok(missing.missing.some(x=>x.ruleId==='C01'));
-  const t=createDefaultInitialTemplate();
+  const t=createBankOrderInitialTemplate();
   const security=t.draftPlans.find(x=>x.businessType==='cd_sell').securityId;
   t.holdings.find(x=>x.securityId===security).sellableYuan=0;
   const noHolding=createModel();noHolding.startFromTemplate(t);noHolding.generateProposal();
@@ -102,7 +102,7 @@ test('normal compliant purchases remain permitted and do not acquire improvement
 });
 
 test('release retains the existing initialization marker',()=>{
-  assert.equal(APP_RELEASE,'6-0.38.0');assert.equal(RESET_RELEASE,'6-0.28.0');
+  assert.equal(APP_RELEASE,'6-0.39.0');assert.equal(RESET_RELEASE,'6-0.28.0');
 });
 
 test('an otherwise compliant metric worsening within its limit forbids progressive relief and priority',()=>{
