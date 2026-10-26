@@ -128,7 +128,7 @@ export function setupInitialUI({model,$,esc,escRaw=esc,amount,decimalYuan,ratioP
    case 'import':{openDialog('导入默认模板',`<p>校验后替换默认模板，不覆盖当前运行。文件应由“导出默认模板”生成；运行存档请在“数据与存储”中导入。</p><input type="file" id="initial-import" accept=".json,application/json"><div id="form-error" class="form-error"></div>`);$('initial-import').onchange=async event=>{try{const file=event.target.files[0],epoch=storage.generation;if(!file)return;if(file.size>2e6)throw new Error('模板超过2MB');const text=await file.text();if(epoch!==storage.generation)throw new Error('账号状态已变化，未导入模板。');persist(normalizeInitialTemplate(JSON.parse(text)));closeDialog();}catch(error){formError(error);}};break;}
   }}
  }catch(error){formError(error);}});
- return {renderPage,preserve,template:()=>copy(template),reloadStorage,replaceTemplate(value){template=normalizeInitialTemplate(value);loadWarning='';},resetStorage(){template=createDefaultInitialTemplate();loadWarning='';}};
+ return {renderPage,preserve,resetToDefault(){begin(createDefaultInitialTemplate(),{replaceTemplate:true,presetLabel:presets['remediation-sample'].label});},template:()=>copy(template),reloadStorage,replaceTemplate(value){template=normalizeInitialTemplate(value);loadWarning='';},resetStorage(){template=createDefaultInitialTemplate();loadWarning='';}};
 }
 
 // Trade-date totals deliberately differ from settlement-date cash breakdowns.

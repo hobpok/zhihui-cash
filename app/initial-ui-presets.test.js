@@ -141,3 +141,30 @@ for(const failKey of [HISTORY_KEY,`${TEMPLATE_KEY}-before-single-day`,TEMPLATE_K
   assert.equal(h.staged.length,1);assert.equal(h.changes.length,1);
  });
 }
+
+test('reset-current action replaces a customized template and old run with the canonical no-sale case and stages both',t=>{
+ const old=createBankOrderInitialTemplate();old.label='自定义旧起点';old.draftPlans[0].targetYuan=300000000;
+ const h=harness(t,{savedTemplate:old});h.model.startFromTemplate(old);h.model.generateProposal('AUTO');
+ const before=h.model.serialize();h.ui.resetToDefault();
+ const state=h.model.getState(),expected=createDefaultInitialTemplate();
+ assert.deepEqual(state.initialData,expected);assert.deepEqual(h.ui.template(),expected);
+ assert.equal(state.plans.length,5);assert.ok(state.plans.every(p=>p.businessType!=='cd_sell'));
+ assert.equal(Object.keys(state.execution.instructions).length,0);assert.equal(Object.keys(state.execution.fills).length,0);
+ assert.notEqual(state.context.runId,JSON.parse(before).context.runId);
+ assert.equal(JSON.parse(h.values.get(HISTORY_KEY))[0].state,before);
+ assert.deepEqual(JSON.parse(h.values.get(`${TEMPLATE_KEY}-before-single-day`)),old);
+ assert.deepEqual(JSON.parse(h.values.get(TEMPLATE_KEY)),expected);
+ assert.equal(h.staged.length,1);assert.deepEqual(h.staged[0],expected);
+ assert.equal(h.changes.length,1);assert.deepEqual(h.changes[0].run.initialData,expected);
+});
+
+for(const failKey of [HISTORY_KEY,`${TEMPLATE_KEY}-before-single-day`,TEMPLATE_KEY]){
+ test(`reset-current aborts before changing run or staging cloud state if ${failKey} backup/save fails`,t=>{
+  const h=harness(t,{failKey,savedTemplate:createBankOrderInitialTemplate()}),before=h.model.serialize(),template=h.ui.template();
+  assert.throws(()=>h.ui.resetToDefault(),/storage full/);
+  assert.equal(h.model.serialize(),before);assert.deepEqual(h.ui.template(),template);
+  assert.equal(h.staged.length,0);assert.equal(h.changes.length,0);
+  h.stopFailing();h.ui.resetToDefault();assert.equal(JSON.parse(h.values.get(HISTORY_KEY)).length,1);
+  assert.equal(h.model.getState().plans.length,5);
+ });
+}
