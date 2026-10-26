@@ -2,7 +2,7 @@ import { HttpError } from './errors.js';
 import { invokeAiAdapter, normalizeAiOutput } from './ai-adapter.js';
 import { publicAiStatus, resolveAiConfig } from './ai-config.js';
 import { validateDocument } from './contracts.js';
-import { invokeAiDialogue, latestUserRequest, aiDialogueDiagnosticReason } from './ai-dialogue.js';
+import { invokeAiDialogue, latestUserRequest, aiDialogueDiagnosticReason, aiDialogueDiagnostic } from './ai-dialogue.js';
 import { createPlanningTools } from './planning-tools.js';
 import { SINGLE_DAY_DEMO_MODE } from '../app/initial-data.js';
 
@@ -96,7 +96,10 @@ function publicRequest(row, quota) {
     : { timed_out: 'AI_TIMEOUT', cancelled: 'AI_CANCELLED', expired: 'AI_EXPIRED' }[row.status];
   if (row.status === 'failed') {
     const reason = storedDiagnosticReason(row.result_json);
-    if (reason !== undefined) result.diagnosticReason = reason;
+    if (reason !== undefined) {
+      result.diagnosticReason = reason;
+      result.diagnostic = aiDialogueDiagnostic({code: result.errorCode, diagnosticReason: reason});
+    }
   }
   return result;
 }
@@ -106,12 +109,20 @@ function normalizeDialogueOutput(output, continuity) {
     throw new Error('invalid dialogue output');
   }
   const normalized = normalizeAiOutput({ text: output.text, usage: output.usage });
-  const dialogue = output.dialogue;
+  const dialogue = output.dialogue && { ...output.dialogue };
   if (!dialogue || typeof dialogue !== 'object' || Array.isArray(dialogue) ||
     typeof dialogue.status !== 'string' || dialogue.status.length > 64 ||
     typeof dialogue.answer !== 'string' || dialogue.answer.length > 4000 ||
     !Array.isArray(dialogue.references) || !Array.isArray(dialogue.evidence)) {
     throw new Error('invalid dialogue result');
+  }
+  if (dialogue.diagnostic) {
+    const reason = aiDialogueDiagnosticReason({code:'AI_DIALOGUE_INVALID', diagnosticReason:dialogue.diagnostic.reason});
+    const recovery = dialogue.diagnostic.recovery;
+    if (reason !== 'unknown' && dialogue.diagnostic.recovered === true &&
+        ['trusted_summary','rewritten_answer'].includes(recovery)) {
+      dialogue.diagnostic = {reason, recovery, recovered:true};
+    } else delete dialogue.diagnostic;
   }
   const json = JSON.stringify({ continuityVersion: CONTINUITY_VERSION, dialogue, continuity });
   if (!json || encoder.encode(json).byteLength > MAX_STORED_BYTES ||

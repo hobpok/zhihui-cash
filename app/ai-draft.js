@@ -148,19 +148,23 @@ export function createAiDraft({ model } = {}) {
       if (result.status === 'invalid_intent') throw new Error(result.errors.join('；') || '本地意图无效');
       const differences = discrepancies(server, result);
       state.result = { ...publicResult(result), intent, serverMismatch: differences.length > 0,
-        serverDiscrepancies: differences, evidenceCallId: plans.at(-1).callId };
+        serverDiscrepancies: differences, evidenceCallId: plans.at(-1).callId,
+        remediation: server.remediation?.status === 'candidate' ? copy(server.remediation) : null };
       prepared = { token: local.token, mainDraftId: result.main?.draftId ?? null,
-        alternativeDraftId: result.alternative?.draftId ?? null };
+        alternativeDraftId: result.alternative?.draftId ?? null,
+        requiresRemediationConsent: server.remediation?.status === 'candidate' };
     } catch (error) { state.error = error?.message || '本地拟单失败'; }
     return snapshot();
   }
 
-  function confirm(role, { acceptTargetChanges = false } = {}) {
+  function confirm(role, { acceptTargetChanges = false, acceptRemediation = false } = {}) {
     state.error = '';
     try {
       if (!['main', 'alternative'].includes(role) || !prepared || !state.result)
         throw new Error('没有可确认的本地草案，请重新测算');
       if (state.appliedRole) throw new Error('草案已应用，请重新测算');
+      if (prepared.requiresRemediationConsent && acceptRemediation !== true)
+        throw new Error('请先明确同意新增卖券补救动作，再加入计划。');
       if (state.result.serverMismatch) throw new Error('服务端摘要与本地结果不一致，请重新请求并核对差异');
       if (readPlanningSnapshot(model).token !== prepared.token)
         throw new Error('本地运行已变化，请重新测算');

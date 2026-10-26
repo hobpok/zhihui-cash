@@ -88,6 +88,43 @@ test('classified terminal failures show safe Chinese guidance without becoming r
   }
 });
 
+test('terminal diagnostic and request ID reach the UI with safe targeted guidance', async () => {
+  for (const [reason,recovery,guidance] of [
+    ['reference_stale','refresh_run',/更新.*测算结果/],
+    ['reference_missing','retry',/引用缺失/],
+    ['required_tool','retry',/必需.*测算依据/],
+    ['answer_shape','retry',/结构或内容/],
+  ]) {
+    const diagnostic={reason,recovery,recovered:false};
+    const c=client(async()=>Response.json({requestId:'request-0001',status:'failed',simulated:false,
+      errorCode:'AI_DIALOGUE_INVALID',diagnosticReason:reason,diagnostic:{...diagnostic,raw:'SECRET'}}));
+    await c.send('原需求');
+    const state=c.snapshot();
+    assert.equal(state.requestId,'request-0001');
+    assert.deepEqual(state.diagnostic,diagnostic);
+    assert.equal(state.diagnosticReason,reason);
+    assert.match(state.error,guidance);
+    assert.doesNotMatch(JSON.stringify(state),/SECRET/);
+    assert.equal(state.recoverable,false);
+  }
+  const c=client(async()=>Response.json({...body,status:'failed',errorCode:'AI_DIALOGUE_INVALID',
+    diagnostic:{reason:'SECRET provider output',recovery:'retry',recovered:false}}));
+  await c.send('原需求');
+  assert.equal(c.snapshot().diagnostic,null);
+  assert.doesNotMatch(JSON.stringify(c.snapshot()),/SECRET|补充需求/);
+});
+
+test('completed recovered diagnostics reach UI without creating another request', async () => {
+  let calls=0;
+  const diagnostic={reason:'narrative_amount',recovery:'rewritten_answer',recovered:true};
+  const c=client(async()=>{calls++;return Response.json({...body,dialogue:{...body.dialogue,diagnostic}});});
+  await c.send('原需求');
+  assert.equal(c.snapshot().requestId,'request-0001');
+  assert.deepEqual(c.snapshot().diagnostic,diagnostic);
+  assert.equal(c.snapshot().phase,'completed');
+  assert.equal(calls,1);
+});
+
 test('automatic GET recovery uses the stored terminal classification and never replays failed POST', async () => {
   const calls = [];
   const c = createAiConversation({ makeId: () => 'request-0001', recoveryPollMs: 1,
@@ -436,6 +473,28 @@ test('SSE 4xx rejection clears preview and never replays or becomes recoverable'
     assert.equal(c.snapshot().previewText, ''); assert.equal(c.snapshot().result, null);
     assert.equal(c.snapshot().recoverable, false); assert.equal(calls, 1);
     assert.deepEqual(c.snapshot().transcript, []);
+  }
+});
+
+test('SSE terminal failed completion and error frames preserve safe diagnostics and original ID', async () => {
+  const diagnostic={reason:'reference_stale',recovery:'refresh_run',recovered:false};
+  for (const type of ['complete','error']) {
+    const wire=controlledStream(); let calls=0;
+    const c=createAiConversation({makeId:()=> 'request-0001',fetchImpl:async()=>{calls++;return wire.response;}});
+    c.setContext(context);const pending=c.send('原需求');
+    wire.push(streamFrame('preview',{text:'临时未验证答复',round:0}));await tick();
+    wire.push(type==='complete' ? completeFrame({requestId:'request-0001',status:'failed',simulated:false,
+      errorCode:'AI_DIALOGUE_INVALID',diagnostic}) : streamFrame('error',{
+      error:'AI_DIALOGUE_INVALID',httpStatus:409,diagnostic:{...diagnostic,raw:'SECRET'}}));
+    await pending;
+    assert.equal(c.snapshot().phase,'error');
+    assert.equal(c.snapshot().requestId,'request-0001');
+    assert.deepEqual(c.snapshot().diagnostic,diagnostic);
+    assert.match(c.snapshot().error,/更新.*测算结果/);
+    assert.equal(c.snapshot().previewText,'');
+    assert.equal(c.snapshot().recoverable,false);
+    assert.doesNotMatch(JSON.stringify(c.snapshot()),/SECRET/);
+    assert.equal(calls,1);
   }
 });
 

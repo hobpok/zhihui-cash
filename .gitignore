@@ -183,6 +183,25 @@
 !/tutorial/index.html
 !/tutorial/tutorial.css
 !/tutorial/tutorial.js
+!/app/advancement-classification.test.js
+!/app/batch-commit.test.js
+!/app/cloud-conflict-recovery.test.js
+!/app/display-labels.test.js
+!/app/progressive-inflow.test.js
+!/app/remaining-plan-execution.test.js
+!/app/remaining-plan-order.test.js
+!/app/remediation-ui.js
+!/app/remediation.js
+!/app/remediation.test.js
+!/server/ai-funding-language.test.js
+!/server/current-cash-api.test.js
+!/server/current-cash-requirement.test.js
+!/server/current-cash-route.test.js
+!/server/next-trade-api.test.js
+!/server/next-trade-funding.js
+!/server/next-trade-funding.test.js
+!/server/next-trade-route.test.js
+!/server/remediation-integration.test.js
 # Generated artifacts and private local state remain excluded.
 node_modules/
 dist/

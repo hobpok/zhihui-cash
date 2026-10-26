@@ -74,7 +74,7 @@ test('model rejects partial simulated fills and batch fills one whole deposit',(
   assert.equal(validateSaved(model.serialize()).ok,true);
 });
 
-test('sent deposits and CDs retain real fill order; cancelled deposit creates no dependency',()=>{
+test('sent deposits and CDs retain fill order; cancelling an instruction does not discard its remaining deposit goal',()=>{
   const model=start(depositTemplate({other:58,cd:true}));model.generateProposal();model.approveProposal();
   const sent=model.sendBatch();assert.deepEqual(sent.results.map(row=>row.status),['accepted','accepted']);
   const depositId=sent.results.find(row=>sent.execution.instructions[row.instructionId].businessType==='deposit').instructionId;
@@ -98,7 +98,10 @@ test('sent deposits and CDs retain real fill order; cancelled deposit creates no
   cancelled.simulateEvent('cancel_confirmed',{instructionId:d,cancelRequestId:request.cancelRequestId,
     cancelSliceId:'FULL',reservationId:d,nominalYuan:2*YI,releaseYuan:2*YI,nominalConfirmed:true,releaseConfirmed:true});
   assert.equal(deriveExecutionOrderDependencies(cancelled.getState(),b).some(row=>!row.ready),false);
-  assert.equal(executionFillReadiness(cancelled.getState(),b).ready,true);
+  const remainingGoal=executionFillReadiness(cancelled.getState(),b);
+  assert.equal(remainingGoal.ready,false);
+  assert.equal(remainingGoal.ruleId,'PLAN-DEPOSIT-ORDER');
+  assert.match(remainingGoal.reason,/剩余整笔存款/);
 });
 
 test('saved instruction conditions reject malformed arrays, amounts and references, while absent old fields remain valid',()=>{

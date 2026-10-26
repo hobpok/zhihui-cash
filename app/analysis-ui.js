@@ -1,6 +1,6 @@
 // D iteration: read-only indicators and source-aware catalog presentation.
 import {buildAnalysis, normalizeAnalysisPreferences, updateAnalysisPreference} from './analysis.js';
-import {displayLabel} from './display-labels.js';
+import {displayLabel, displayText} from './display-labels.js';
 
 const STORAGE_KEY = 'zhihui-analysis-preferences-v1';
 const FILTERS = new Set(['all', 'favorite', 'abnormal', 'missing']);
@@ -90,12 +90,13 @@ function sortRows(rows, keyOf, preferences) {
   }).map(x => x.row);
 }
 
-export function setupAnalysisUI({model, $, esc, openDialog, closeDialog, notify, render}) {
+export function setupAnalysisUI({model, $, esc, escRaw=esc, openDialog, closeDialog, notify, render}) {
   let view = 'core', filter = 'all', search = '', selectedStep = '', preferences = readPreferences();
   let latest = null, runId = null, projectionExpiryTimer = null;
   const root = $('analysis-screen');
   if (!root) throw new Error('缺少 #analysis-screen 容器');
-  const safe = value => esc(value == null ? '待补' : value);
+  const rawSafe = value => escRaw(value == null ? '' : value);
+  const safe = value => esc(value == null ? '待补' : displayText(value));
   const neededText = items => [...new Set(items.map(value=>String(value)
     .replace(/banks\.([^.]+)\.custodyQualified/g,(_,id)=>`${displayLabel(model.getState().initialData?.banks?.find(b=>b.bankId===id)?.label)||id}托管资格`)
     .replace(/banks\.([^.]+)\.ratingAsOf/g,(_,id)=>`${displayLabel(model.getState().initialData?.banks?.find(b=>b.bankId===id)?.label)||id}评级日期`)
@@ -108,8 +109,8 @@ export function setupAnalysisUI({model, $, esc, openDialog, closeDialog, notify,
     return `<span class="analysis-status analysis-status--${tone}">${label}</span>`;
   };
   const control = (key, label, isFavorite, canOrder) =>
-    `<div class="analysis-row-actions"><button type="button" data-analysis-action="toggle" data-key="${safe(key)}" aria-label="${isFavorite ? '取消常用' : '加入常用'}：${safe(label)}" title="${isFavorite ? '取消常用' : '加入常用'}">${isFavorite ? '★' : '☆'}</button>`+
-    (canOrder ? `<button type="button" data-analysis-action="up" data-key="${safe(key)}" aria-label="上移：${safe(label)}" title="上移">↑</button><button type="button" data-analysis-action="down" data-key="${safe(key)}" aria-label="下移：${safe(label)}" title="下移">↓</button>` : '') + '</div>';
+    `<div class="analysis-row-actions"><button type="button" data-analysis-action="toggle" data-key="${rawSafe(key)}" aria-label="${isFavorite ? '取消常用' : '加入常用'}：${safe(label)}" title="${isFavorite ? '取消常用' : '加入常用'}">${isFavorite ? '★' : '☆'}</button>`+
+    (canOrder ? `<button type="button" data-analysis-action="up" data-key="${rawSafe(key)}" aria-label="上移：${safe(label)}" title="上移">↑</button><button type="button" data-analysis-action="down" data-key="${rawSafe(key)}" aria-label="下移：${safe(label)}" title="下移">↓</button>` : '') + '</div>';
   const searched = (row, fields) => !search || fields.some(x => String(x ?? '').toLocaleLowerCase('zh-CN').includes(search));
 
   function buildCoreRows() {
@@ -126,7 +127,7 @@ export function setupAnalysisUI({model, $, esc, openDialog, closeDialog, notify,
         const threshold = notapp && row.threshold == null ? '—' : thresholdText(row.threshold, row.unit);
         const headroom = row.ruleId === 'C09' ? '金额余量不适用' :
           row.headroomYuan == null ? (notapp ? '—/不适用' : '待补') : displayValue(row.headroomYuan, 'yuan');
-        return `<tr data-analysis-row="core" data-key="${safe(row.key)}"><td>${control(row.key, row.name, favorites.has(row.key), favorites.has(row.key))}</td>`+
+        return `<tr data-analysis-row="core" data-key="${rawSafe(row.key)}"><td>${control(row.key, row.name, favorites.has(row.key), favorites.has(row.key))}</td>`+
           `<td><b>${safe(row.name)}</b><small>${safe(displayLabel(row.subjectLabel) || '当前组合')}${row.ruleId==='C09'&&row.unit==='days'?' · 分母为净值＋存续正回购本金':''}</small></td>`+
           `<td class="analysis-number">${safe(currentText)}</td>`+
           `<td class="analysis-number">${latest.projection?.available || notapp ? safe(projectedText) : '—'}</td>`+
@@ -144,7 +145,7 @@ export function setupAnalysisUI({model, $, esc, openDialog, closeDialog, notify,
       matchFilter(row, row.metricId, filter, favorites) && searched(row, [row.metricId, row.name, row.category, row.unitEvidence]));
     return `<p class="analysis-note">历史目录保留原始名称与证据；当前数值、阈值和公式均待数据接入。历史组合代码只在来源详情中展示。</p>`+
       `<div class="analysis-table-wrap"><table class="analysis-table analysis-table--history"><thead><tr><th>常用 / 顺序</th><th>指标名称</th><th>类别（推断）</th><th>当前值</th><th>单位证据</th><th>状态</th><th>来源</th></tr></thead><tbody>`+
-      rows.map(row => `<tr data-analysis-row="historical" data-key="${safe(row.metricId)}"><td>${control(row.metricId, row.name, favorites.has(row.metricId), favorites.has(row.metricId))}</td>`+
+      rows.map(row => `<tr data-analysis-row="historical" data-key="${rawSafe(row.metricId)}"><td>${control(row.metricId, row.name, favorites.has(row.metricId), favorites.has(row.metricId))}</td>`+
         `<td><b>${safe(row.name)}</b><small>${safe(row.metricId)}</small></td><td>${safe(row.category)}</td><td class="analysis-number">待补</td>`+
         `<td>${safe(row.unitEvidence || '待核实')}</td><td>${statusTag('missing')}</td>`+
         `<td><button type="button" data-analysis-detail="historical" data-index="${source.indexOf(row)}">来源</button></td></tr>`).join('')+
@@ -156,9 +157,9 @@ export function setupAnalysisUI({model, $, esc, openDialog, closeDialog, notify,
     const favoriteRules = new Set((preferences.favorites || []).filter(key => key.startsWith('C')).map(key => key.split(':')[0]));
     const rows = source.filter(row => matchFilter(row, row.ruleId, filter, favoriteRules) &&
       searched(row, [row.ruleId, row.name, row.source]));
-    return `<p class="analysis-note">原120项目录保留，另增1项公司新增存款演示闸门；合计121项，10项已配置、111项待提供。主体判断数量另计；不适用不计作通过。</p>`+
+    return `<p class="analysis-note">原120项目录保留，另增1项公司新增存款闸门；合计121项，10项已配置、111项待提供。主体判断数量另计；不适用不计作通过。</p>`+
       `<div class="analysis-table-wrap"><table class="analysis-table analysis-table--rules"><thead><tr><th>目录编号</th><th>规则名称</th><th>配置状态</th><th>实际判断</th><th>依据</th></tr></thead><tbody>`+
-      rows.map(row => `<tr data-analysis-row="rules" data-key="${safe(row.ruleId)}"><td>${safe(row.ruleId)}</td><td><b>${safe(row.name || '待提供')}</b></td>`+
+      rows.map(row => `<tr data-analysis-row="rules" data-key="${rawSafe(row.ruleId)}"><td>${safe(row.ruleId)}</td><td><b>${safe(row.name || '待提供')}</b></td>`+
         `<td>${statusTag(statusOf(row))}</td><td>${row.configured ? '见核心实时指标' : '待提供规则内容与输入'}</td>`+
         `<td><button type="button" data-analysis-detail="rules" data-index="${source.indexOf(row)}">详情</button></td></tr>`).join('')+
       (rows.length ? '' : '<tr><td colspan="5" class="analysis-empty">没有匹配的目录项</td></tr>') + '</tbody></table></div>';
@@ -196,7 +197,7 @@ export function setupAnalysisUI({model, $, esc, openDialog, closeDialog, notify,
         line('质量备注', row.qualityNotes?.length ? JSON.stringify(row.qualityNotes) : '无');
     } else {
       body = line('目录编号', row.ruleId)+line('名称', row.name || '待提供')+
-        line('状态', row.configured ? '已配置演示规则或交易闸门' : '规则定义、阈值、输入与实际结果待提供')+
+        line('状态', row.configured ? '已配置规则或交易闸门' : '规则定义、阈值、输入与实际结果待提供')+
         line('来源', typeof row.source === 'string' ? row.source : JSON.stringify(row.source || '待提供'))+
         line('数据日期', row.asOfDate || latest.context?.asOfDate || '待提供');
     }
@@ -217,10 +218,10 @@ export function setupAnalysisUI({model, $, esc, openDialog, closeDialog, notify,
       [['目录总数', counts.catalogTotal ?? 121], ['已配置规则', counts.configuredRules ?? 10], ['实际计算主体项', counts.calculatedSubjectChecks ?? 0], ['主体待补', counts.missingSubjectChecks ?? 0], ['规则待提供', counts.unprovidedRules ?? 111], ['历史指标目录', counts.historicalMetrics ?? 102], ['外部读取', counts.externalRead ?? 0]].map(([label, value]) => `<div><span>${label}</span><b>${safe(value)}</b></div>`).join('')+
       `</div><div class="analysis-toolbar"><div class="analysis-tabs" role="tablist" aria-label="分析视图">`+
       [['core','核心实时指标'],['historical','历史102指标'],['rules','规则目录与新增闸门']].map(([key,label]) => `<button type="button" id="analysis-tab-${key}" data-analysis-view="${key}" role="tab" aria-selected="${currentView === key}">${label}</button>`).join('')+
-      `</div><div class="analysis-query"><label for="analysis-search">搜索</label><input id="analysis-search" type="search" value="${safe(search)}" placeholder="名称、主体或编号" autocomplete="off"><label for="analysis-filter">筛选</label><select id="analysis-filter">`+
+      `</div><div class="analysis-query"><label for="analysis-search">搜索</label><input id="analysis-search" type="search" value="${rawSafe(search)}" placeholder="名称、主体或编号" autocomplete="off"><label for="analysis-filter">筛选</label><select id="analysis-filter">`+
       [['all','全部'],['favorite','常用'],['abnormal','异常'],['missing','待补']].map(([key,label]) => `<option value="${key}" ${filter === key ? 'selected' : ''}>${label}</option>`).join('')+
       `</select></div></div>`+
-      (currentView === 'core' ? `<div class="analysis-projection"><label for="analysis-step">单笔交易后预计值</label><select id="analysis-step"><option value="">仅当前值</option>${steps.map((step, index) => `<option value="${safe(step.stepId)}" ${selectedStep === step.stepId ? 'selected' : ''}>第${index+1}步 · ${safe(displayLabel(state.plans?.find(p => p.planId === step.planId)?.label) || '交易步骤')}</option>`).join('')}</select><span class="analysis-projection-note ${projection.available ? 'analysis-projection-note--ready' : ''}">${safe(projection.available ? `${projection.label || '单笔独立测算，未计其他未发计划或前序条件'}；仍须最新审核与手动下达。` : projection.reason || '选择交易步骤后核对预计值。')}</span></div>` : '')+
+      (currentView === 'core' ? `<div class="analysis-projection"><label for="analysis-step">单笔交易后预计值</label><select id="analysis-step"><option value="">仅当前值</option>${steps.map((step, index) => `<option value="${rawSafe(step.stepId)}" ${selectedStep === step.stepId ? 'selected' : ''}>第${index+1}步 · ${safe(displayLabel(state.plans?.find(p => p.planId === step.planId)?.label) || '交易步骤')}</option>`).join('')}</select><span class="analysis-projection-note ${projection.available ? 'analysis-projection-note--ready' : ''}">${safe(projection.available ? `${projection.label || '单笔独立测算，未计其他未发计划或前序条件'}；仍须最新审核与手动下达。` : projection.reason || '选择交易步骤后核对预计值。')}</span></div>` : '')+
       `<section class="analysis-panel" aria-labelledby="analysis-section-title"><div class="analysis-panel-head"><h2 id="analysis-section-title">${currentView === 'core' ? '核心规则 · 按适用主体逐项展开' : currentView === 'historical' ? '历史指标来源目录' : '规则目录与新增闸门'}</h2><span>${currentView === 'core' ? `10项配置规则与闸门 · ${safe(counts.applicableSubjectChecks ?? 0)}项适用主体判断 · 不适用${safe(counts.notapp ?? 0)}项` : currentView === 'historical' ? '102项仅作历史目录' : '10项已配置 / 111项待提供'}</span></div>`+
       (currentView === 'core' ? latest.context?.coreEnabled ? buildCoreRows() : '<div class="analysis-empty">该历史运行未启用当前核心规则，不能沿用当前模板的规则结果。</div>' : currentView === 'historical' ? buildHistoricalRows() : buildRuleRows())+
       `</section><p class="analysis-foot">当前值来自工作区账目；交易后预计值仅在选定步骤可可靠测算时显示。阈值色带按当前判断状态标示，不代表额外预警线。未知保持待补；不适用不计作通过。</p>`;

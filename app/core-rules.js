@@ -236,9 +236,9 @@ export function evaluateCoreRules(state,{plan=null,amountYuan=0,projectedActions
   const todaySettlement=!plan?.settlementDate || plan.settlementDate<=today;
   const cost=candidate && isPurchase(plan) && todaySettlement?q:0n;
   const afterCash=cash===null||cost===null?null:cash-cost;
-  // A financing candidate is assessed under its explicit fill premise. It does not
-  // credit the execution ledger: only confirmed fills can improve actual business cash.
-  const c01Cash=singleDay && candidate && isFinancing(plan) && todaySettlement ?
+  // Assess both financing and security sales under the same fill premise. This
+  // projection never credits the ledger; only confirmed fills change business cash.
+  const c01Cash=singleDay && candidate && (isFinancing(plan)||isSale(plan)) && todaySettlement ?
     (afterCash===null || q===null ? null : afterCash+q) : afterCash;
   const futureRows=candidate && isPurchase(plan) && !todaySettlement ?
     (state.summary?.dateBalances ?? []).filter(x=>x.valueDate>=plan.settlementDate) : [];
@@ -252,6 +252,7 @@ export function evaluateCoreRules(state,{plan=null,amountYuan=0,projectedActions
     {...r,result:c01After>=0n?'pass':'block',currentValue:out(cash),projectedValue:out(c01After),
       numeratorYuan:out(c01After),headroomYuan:out(c01After),valueDate:futureFloor===null?today:plan.settlementDate,
       reason:c01After>=0n?'头寸非负':'下达后头寸为负'});
+  if (!futureUnknown) track(rows.length-1,cash,c01After,1n,1n,0n,1n,true);
   let currentGov=c.gov,projectedGov=c.gov;
   if (candidate && plan.securityId) {
     const s=c.securities.get(plan.securityId);
@@ -403,19 +404,24 @@ export function evaluateCoreRules(state,{plan=null,amountYuan=0,projectedActions
     track(rows.length-1,w.currentNum,w.projectedNum,w.currentDen,w.projectedDen,90n,1n);
   }
   if (singleDay && candidate) {
-    const improves=comparisons.some(x=>x.currentBreached && x.trend>0);
-    const harmful=comparisons.some(x=>(x.currentBreached && x.trend<0) ||
-      (!x.currentBreached && x.projectedBreached));
+    const improves=comparisons.some(x=>x.trend>0);
+    // The progressive exception requires every comparable metric to be no worse,
+    // including compliant metrics moving towards their limit. Ordinary compliant
+    // trades retain their threshold checks and do not need this exception.
+    const harmful=comparisons.some(x=>x.trend<0);
     for (const x of comparisons) {
-      const current=rows[x.index];
+      const current={...rows[x.index],improvementTrend:x.trend};
+      rows[x.index]=current;
       if (!x.projectedBreached) continue;
       if (!x.currentBreached) rows[x.index]={...current,result:'block',reason:'本笔使原达标指标新超限'};
       else if (x.trend<0) rows[x.index]={...current,result:'block',reason:'本笔使已超限指标进一步恶化'};
       else if (!improves) rows[x.index]={...current,result:'block',
-        reason:'已有指标超限，本笔未改善任何已超限指标'};
+        reason:'已有指标超限，本笔未改善任何适用指标'};
+      else if (harmful) rows[x.index]={...current,result:'block',
+        reason:'仍有指标未达标，且本笔使其他指标恶化，不满足渐进改善条件'};
       else if (!harmful) rows[x.index]={...current,result:'warn',
         reason:(x.trend>0 ? '本笔改善已超限指标，但交易后仍未达标；按渐进改善条件放行' :
-          '该指标仍超限但未恶化，其他已超限指标改善；按渐进改善条件放行')+
+          '该指标仍超限但未恶化，其他适用指标改善；按渐进改善条件放行')+
           (current.ruleId==='C02' && isSale(plan) ? '；回款未实际到账前不可用于其他交易付款' : '')};
     }
   }

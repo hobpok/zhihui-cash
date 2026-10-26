@@ -169,7 +169,7 @@ test('a cash-ratio versus payment-account follow-up uses fresh metrics and a uni
   ],(body,index)=>{
     if(index===0) {
       assert.deepEqual(body.tool_choice,{type:'function',function:{name:'read_metrics'}});
-      assert.match(body.messages[0].content,/当前数据与规则用于合成演示.*尚未核实为正式适用制度/);
+      assert.match(body.messages[0].content,/依据当前运行的数据与已配置规则回答.*不得将配置阈值表述为已核实的正式监管制度/);
       assert.match(body.messages[0].content,/若只问概念区别，先用简短自然语言说明/);
       assert.match(body.messages[0].content,/不展开融资、逆回购、可投额度、拟单或后续交易安排/);
       assert.doesNotMatch(body.messages[0].content,/须按allocationBasis说明/);
@@ -195,7 +195,7 @@ test('wrapped concept follow-up retains read-only metric routing despite prior m
   const output = await invokeAiDialogue({message,resolved,tools,
     fetchImpl:scriptedFetch([toolTurn(toolCall('fresh')),
       finalTurn({kind:'answer',references:['fresh'],
-        narrative:'现金比例是本演示规则下的比例，实际付款账户现金是独立核对付款能力的金额。'})],
+        narrative:'现金比例是已配置规则下的比例，实际付款账户现金是独立核对付款能力的金额。'})],
     (body,index)=>{
       if(index===0) {
         assert.deepEqual(body.tool_choice,{type:'function',function:{name:'read_metrics'}});
@@ -204,7 +204,7 @@ test('wrapped concept follow-up retains read-only metric routing despite prior m
       }
     }).fetchImpl});
   assert.deepEqual(tools.calls.map(call=>call.name),['read_metrics']);
-  assert.match(output.dialogue.answer,/本演示规则下/);
+  assert.match(output.dialogue.answer,/已配置规则下/);
 });
 
 test('explicitly excluded trade and next-step phrases stay on the read-only metric route', async () => {
@@ -221,7 +221,7 @@ test('explicitly excluded trade and next-step phrases stay on the read-only metr
     const output = await invokeAiDialogue({message,resolved,tools,
       fetchImpl:scriptedFetch([toolTurn(toolCall('metrics')),
         finalTurn({kind:'answer',references:['metrics'],
-          narrative:'现金比例是本演示规则的比例，实际账户现金是核对付款能力的金额。'})],
+          narrative:'现金比例是已配置规则的比例，实际账户现金是核对付款能力的金额。'})],
       (body,index)=>{
         if(index===0) assert.deepEqual(body.tool_choice,
           {type:'function',function:{name:'read_metrics'}},message);
@@ -283,17 +283,19 @@ test('tool-name citation recovery stays unambiguous and does not bypass numeric 
   assert.equal(invalidAmount.count,3);
 });
 
-test('a current cash explanation must cite current metrics even if another tool was also called', async () => {
+test('missing required metric citation recovers a deterministic summary from current tools', async () => {
   const tools = fixture();
   tools.definitions.push({type:'function',function:{name:'review_sorting',description:'Read sort',
     parameters:{type:'object',properties:{},required:[],additionalProperties:false}}});
-  await assert.rejects(invokeAiDialogue({message:'解释当前现金比例与实际账户现金',resolved,tools,
+  const output = await invokeAiDialogue({message:'解释当前现金比例与实际账户现金',resolved,tools,
     fetchImpl:scriptedFetch([
       toolTurn(toolCall('metrics','read_metrics')),
       toolTurn(toolCall('sorting','review_sorting')),
       finalTurn({kind:'answer',references:['sorting'],narrative:'现金比例是比例。'}),
-    ]).fetchImpl}),error=>error.code==='AI_DIALOGUE_INVALID' &&
-      aiDialogueDiagnosticReason(error)==='required_reference');
+    ]).fetchImpl});
+  assert.deepEqual(output.dialogue.references,['metrics','sorting']);
+  assert.deepEqual(output.dialogue.diagnostic,{reason:'required_reference', recovery:'trusted_summary', recovered:true});
+  assert.equal(output.dialogue.narrative,undefined);
 });
 
 test('dialogue diagnostic reason is a fixed enum and never echoes input', async () => {
@@ -305,6 +307,122 @@ test('dialogue diagnostic reason is a fixed enum and never echoes input', async 
     !JSON.stringify(error).includes('private-user-text'));
   assert.equal(aiDialogueDiagnosticReason({code:'AI_DIALOGUE_INVALID',diagnosticReason:'private-user-text'}),'unknown');
   assert.equal(aiDialogueDiagnosticReason(new Error('private-user-text')),'unknown');
+});
+
+test('omitted or empty citations recover only a current deterministic summary, never model prose', async () => {
+  for (const references of [undefined, []]) {
+    const scripted = scriptedFetch([toolTurn(toolCall('fresh')),
+      finalTurn({kind:'answer',...(references === undefined ? {} : {references}),
+        narrative:'当前账户现金999亿元。SECRET provider prose'})]);
+    const result = await invokeAiDialogue({message:'查看当前指标',resolved,tools:fixture(),fetchImpl:scripted.fetchImpl});
+    assert.deepEqual(result.dialogue.references,['fresh']);
+    assert.deepEqual(result.dialogue.diagnostic,{reason:'reference_missing',recovery:'trusted_summary',recovered:true});
+    assert.equal(result.dialogue.narrative,undefined);
+    assert.doesNotMatch(result.text,/999|SECRET/);
+    assert.equal(scripted.count,2);
+  }
+});
+
+test('missing citations cannot recover a missing required tool, invalid decision, or invalid latest plan', async () => {
+  await assert.rejects(invokeAiDialogue({message:'查看当前指标',resolved,tools:fixture(),
+    fetchImpl:scriptedFetch([finalTurn({kind:'answer'})]).fetchImpl}),
+  error => aiDialogueDiagnosticReason(error)==='reference_missing');
+  await assert.rejects(invokeAiDialogue({message:'下一步',resolved,tools:diagnosisFixture(),
+    fetchImpl:scriptedFetch([toolTurn(toolCall()),finalTurn({kind:'answer'})]).fetchImpl}),
+  error => aiDialogueDiagnosticReason(error)==='required_tool');
+  await assert.rejects(invokeAiDialogue({message:'查看当前指标',resolved,tools:fixture(),
+    fetchImpl:scriptedFetch([toolTurn(toolCall()),finalTurn({kind:'answer',approve:true})]).fetchImpl}),
+  error => aiDialogueDiagnosticReason(error)==='answer_shape');
+  const ledger=[];
+  const tools={context:{},definitions:[{...definition,function:{...definition.function,name:'plan_trades'}}],
+    execute(name){const result={status:ledger.length ? 'invalid_intent' : 'feasible',
+      main:{applicable:false,status:'infeasible'}};ledger.push({toolName:name,result});return result;},
+    getEvidence:()=>structuredClone(ledger)};
+  await assert.rejects(invokeAiDialogue({message:'新增存款方案',resolved,tools,
+    fetchImpl:scriptedFetch([toolTurn(toolCall('old','plan_trades')),
+      toolTurn(toolCall('latest','plan_trades')),finalTurn({kind:'answer'})]).fetchImpl}),
+  error=>aiDialogueDiagnosticReason(error)==='reference_missing');
+});
+
+test('percentage failures are classified separately and retain the trusted summary', async () => {
+  const output=await invokeAiDialogue({message:'查看当前指标',resolved,tools:fixture(),
+    fetchImpl:scriptedFetch([toolTurn(toolCall('fresh')),
+      finalTurn({kind:'answer',references:['fresh'],narrative:'当前现金比例99%。'}),
+      finalTurn({kind:'answer',references:['fresh'],narrative:'当前现金比例99%。'})]).fetchImpl});
+  assert.deepEqual(output.dialogue.diagnostic,{reason:'narrative_percentage',recovery:'trusted_summary',recovered:true});
+  assert.doesNotMatch(output.text,/99%/);
+});
+
+test('an explicit superseded simulation citation is rejected rather than recovered as missing', async () => {
+  const ledger=[];
+  const tools={context:{},definitions:[{...definition,function:{...definition.function,name:'simulate_completion'}}],
+    execute(name){const result={status:'ok',terminalStatus:'insufficient_data',pathStatus:'not_verified'};
+      ledger.push({toolName:name,result});return result;},getEvidence:()=>structuredClone(ledger)};
+  await assert.rejects(invokeAiDialogue({message:'只模拟全部完成后的指标',resolved,tools,
+    fetchImpl:scriptedFetch([toolTurn(toolCall('old','simulate_completion')),
+      toolTurn(toolCall('latest','simulate_completion')),finalTurn({kind:'answer',references:['old']})]).fetchImpl}),
+  error=>aiDialogueDiagnosticReason(error)==='reference_stale');
+});
+
+test('explicit whole-plan arrangement and remediation requests force planning, explanations do not', async () => {
+  for (const message of ['安排当前全部计划','为当前计划寻找补救方案','请给出补救方案']) {
+    const tools=fixture();
+    tools.definitions.push({type:'function',function:{name:'plan_trades',description:'Plan',
+      parameters:{type:'object',properties:{},required:[],additionalProperties:false}}});
+    const output=await invokeAiDialogue({message,resolved,tools,
+      fetchImpl:scriptedFetch([toolTurn(toolCall('plan','plan_trades')),
+        finalTurn({kind:'answer',references:['plan']})],(body,index)=>{
+        if(index===0) assert.deepEqual(body.tool_choice,{type:'function',function:{name:'plan_trades'}},message);
+      }).fetchImpl});
+    assert.deepEqual(output.dialogue.references,['plan']);
+  }
+  for (const message of ['只解释补救方案，不拟单','先不拟单，解释如何安排当前全部计划']) {
+    const output=await invokeAiDialogue({message,resolved,tools:fixture(),
+      fetchImpl:scriptedFetch([toolTurn(toolCall('metrics')),
+        finalTurn({kind:'answer',references:['metrics']})],(body,index)=>{
+        if(index===0) assert.equal(body.tool_choice,'auto',message);
+      }).fetchImpl});
+    assert.deepEqual(output.dialogue.references,['metrics']);
+  }
+  const ledger=[];
+  const tools={context:{},definitions:[{...definition,function:{...definition.function,name:'simulate_completion'}}],
+    execute(name){const result={status:'ok',terminalStatus:'insufficient_data',pathStatus:'not_verified'};
+      ledger.push({toolName:name,result});return result;},getEvidence:()=>structuredClone(ledger)};
+  const output=await invokeAiDialogue({message:'只模拟全部完成后的指标，先不拟单',resolved,tools,
+    fetchImpl:scriptedFetch([toolTurn(toolCall('simulation','simulate_completion')),
+      finalTurn({kind:'answer',references:['simulation']})],(body,index)=>{
+      if(index===0) assert.deepEqual(body.tool_choice,{type:'function',function:{name:'simulate_completion'}});
+    }).fetchImpl});
+  assert.deepEqual(output.dialogue.references,['simulation']);
+});
+
+test('deterministic recovery visibly marks sale remediation as awaiting manager confirmation', async () => {
+  const ledger=[];
+  const tools={context:{},definitions:[{...definition,function:{...definition.function,name:'plan_trades'}}],
+    execute(name){const result={status:'feasible',main:{applicable:true,status:'feasible'},
+      remediation:{requiresManagerConfirmation:true,actions:[{businessType:'bond_sell',targetYuan:100,securityId:'bond'}]}};
+      ledger.push({toolName:name,result});return result;},getEvidence:()=>structuredClone(ledger)};
+  const output=await invokeAiDialogue({message:'为当前计划寻找补救方案',resolved,tools,
+    fetchImpl:scriptedFetch([toolTurn(toolCall('plan','plan_trades')),finalTurn({kind:'answer'})]).fetchImpl});
+  assert.match(output.text,/新增1笔卖券，待经理确认/);
+  assert.match(output.text,/尚未应用或成交/);
+});
+
+test('sale remediation restriction follows user constraints and explicit release', async () => {
+  for (const [message,history,disabled] of [
+    ['新增存款，不要卖券',undefined,true],
+    ['新增存款方案',[{userMessage:'不允许卖出任何债券',assistantAnswer:'已记录约束。'}],true],
+    ['新增存款，现在允许卖券',[{userMessage:'不能卖券',assistantAnswer:'已记录约束。'}],false],
+  ]) {
+    const ledger=[]; let received;
+    const tools={context:{},definitions:[{...definition,function:{...definition.function,name:'plan_trades'}}],
+      execute(name,args,requirements){received=requirements;const result={status:'feasible',main:{applicable:false,status:'infeasible'}};
+        ledger.push({toolName:name,result});return result;},getEvidence:()=>structuredClone(ledger)};
+    const output=await invokeAiDialogue({message,history,resolved,tools,
+      fetchImpl:scriptedFetch([toolTurn(toolCall('plan','plan_trades')),finalTurn({kind:'answer'})]).fetchImpl});
+    assert.equal(received.disableRemediation,disabled);
+    assert.equal(output.dialogue.evidence[0].result.main.applicable,false);
+  }
 });
 
 test('positive drafting still forces planning when an earlier clause only protects existing plans', async () => {
@@ -628,6 +746,7 @@ test('one bounded prose repair corrects unsupported money without rerunning tool
   assert.equal(scripted.count, 3);
   assert.deepEqual(tools.calls.map(call => call.name), ['diagnose_execution']);
   assert.match(output.dialogue.narrative, /金额余量0\.1亿元/);
+  assert.deepEqual(output.dialogue.diagnostic,{reason:'narrative_amount',recovery:'rewritten_answer',recovered:true});
   assert.match(output.dialogue.answer, /请刷新测算并重新审核/);
   assert.deepEqual(output.usage, { inputTokens: 30, outputTokens: 15 });
 });

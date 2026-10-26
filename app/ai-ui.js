@@ -1,6 +1,6 @@
 import { createAiConversation } from './ai-conversation.js';
 import { createAiDraft } from './ai-draft.js';
-import { displayLabel } from './display-labels.js';
+import { displayLabel, displayText } from './display-labels.js';
 
 const money = value => {
   if (!Number.isSafeInteger(value)) return '未知';
@@ -62,7 +62,7 @@ const ruleTitle = (row, names) => `${text(row?.ruleId)} ${ruleNames[row?.ruleId]
 const node = (tag, className, content) => {
   const item = document.createElement(tag);
   if (className) item.className = className;
-  if (content !== undefined) item.textContent = text(content);
+  if (content !== undefined) item.textContent = displayText(text(content));
   return item;
 };
 const line = (parent, title, value) => {
@@ -91,6 +91,47 @@ const details = (parent, title, render) => {
   render(section); parent.append(section);
 };
 
+function remediationConsent(parent, id) {
+  const consent = node('label', 'ai-consent');
+  const checkbox = node('input'); checkbox.type = 'checkbox'; checkbox.id = id;
+  consent.append(checkbox, node('span', '', '我同意新增所列卖券补救动作，并确认本方案融资金额；原投资目标保留。'));
+  parent.append(consent);
+}
+
+export function diagnosticPresentation(diagnostic) {
+  if (!diagnostic) return null;
+  const reasons = {
+    json_parse: '答复格式无法解析', decision_shape: '答复结构不完整', answer_shape: '答复结构不完整',
+    reference_missing: '答复缺少核算引用', required_reference: '答复缺少必要核算引用',
+    reference_unknown: '答复引用了未取得的依据', reference_duplicate: '核算引用重复',
+    reference_stale: '答复引用的依据已经过期', required_tool: '尚未取得本次所需的核算结果',
+    no_useful_evidence: '尚未取得有效核算依据', required_answer: '尚未生成可验证的答复',
+    narrative_amount: '解释中的金额与核算结果不一致', narrative_percentage: '解释中的比例与核算结果不一致',
+    narrative_entity: '解释中的交易对象与依据不一致', narrative_cash: '解释混淆了成交、到账或现金口径',
+  };
+  const recovery = {
+    trusted_summary: '已保留可信工具核算摘要；可加入的方案仍须通过本地复核。',
+    rewritten_answer: '解释已按本轮核算依据修复；金额与条件以下方核算结果为准。',
+    refresh_run: '请先保存当前运行，再重新发送需求取得最新测算。旧方案不能继续加入。',
+    retry: '需求已保留，无需为内部校验失败补充交易要素；可重新发送原需求。',
+    clarify: '请补充下方明确列出的缺失交易要素，再重新测算。',
+  };
+  return { reason: reasons[diagnostic.reason] ?? '答复未通过依据校验',
+    recovery: recovery[diagnostic.recovery] ?? '请保留请求编号，重新测算后再核对。' };
+}
+
+export function managerFixedTrades(result) {
+  // Remediation plans are appended to the normalized intent. Remove only that
+  // many matching occurrences, not an identical explicit manager trade as well.
+  const remaining = arr(result.remediation?.actions).map(action => ({ ...action }));
+  return arr(result.intent?.fixedTrades).slice().reverse().filter(item => {
+    const index = remaining.findIndex(action => action.businessType === item.businessType &&
+      action.securityId === item.securityId && action.targetYuan === item.targetYuan);
+    if (index < 0) return true;
+    remaining.splice(index, 1); return false;
+  }).reverse();
+}
+
 function planningEvidence(parent, result, names) {
   const section = node('section', 'ai-evidence');
   section.append(node('h3', '', '方案测算'));
@@ -106,7 +147,14 @@ function planningEvidence(parent, result, names) {
   for (const term of arr(result.termAssumptions)) {
     note(section, `${human(term.businessType)}按 ${term.tenorDays} 天建议期限测算；加入指令区即确认本方案期限，可先在对话中修改。`, 'ai-warning');
   }
-  const fixed = arr(result.intent?.fixedTrades).map(item =>
+  const corrective = arr(result.remediation?.actions);
+  if (result.remediation) {
+    list(section, '补救核算说明', arr(result.remediation.reasons).map(text));
+    list(section, '待经理确认的新增卖券', corrective.map(item =>
+      `${human(item.businessType)} · ${names.asset(item.securityId)} · ${money(item.targetYuan)}；${text(item.reason)}`));
+    if (corrective.length) note(section, '原投资目标完整保留。卖券实际成交后才释放额度，实际付款仍核验账户现金。', 'ai-warning');
+  }
+  const fixed = managerFixedTrades(result).map(item =>
     `${human(item.businessType)} · ${names.asset(item.securityId)} · ${money(item.targetYuan)}`);
   list(section, '经理固定交易目标', fixed);
   list(section, '保留的已有交易', arr(result.existingFixedTargets).map(item =>
@@ -194,7 +242,7 @@ function completionEvidence(parent, result, names) {
   line(section, '当前规则', `阻断 ${arr(current.blocking).length} · 缺失 ${arr(current.missing).length}`);
   line(section, '期末规则', `阻断 ${arr(final.blocking).length} · 缺失 ${arr(final.missing).length}`);
   if (current.enabled === false || final.enabled === false)
-    note(section, '当前运行未启用完整演示规则，期末指标不能据此判为通过。', 'ai-warning');
+    note(section, '当前运行未启用完整规则，期末指标不能据此判为通过。', 'ai-warning');
   const currentById = new Map(arr(current.rows).map(row => [ruleIdentity(row), row]));
   const finalById = new Map(arr(final.rows).map(row => [ruleIdentity(row), row]));
   const allIds = [...new Set([...currentById.keys(), ...finalById.keys()])];
@@ -461,8 +509,15 @@ export function setupAiUI({ model, getContext, prepareContext, onAuthError = () 
       if (snapshot.phase === 'cancelling') note(status, '正在请求服务端取消；本地等待已停止，请稍候确认结果。', 'ai-info');
       if (snapshot.phase === 'cancelled') note(status, '本次请求已取消。');
       if (snapshot.error) note(status, snapshot.error, 'ai-error');
+      const diagnostic = snapshot.diagnostic ?? snapshot.result?.diagnostic;
+      const diagnosticView = diagnosticPresentation(diagnostic);
+      if (diagnosticView) {
+        note(status, `${diagnostic.recovered ? '已恢复：' : '失败原因：'}${diagnosticView.reason}。${diagnosticView.recovery}`, diagnostic.recovered ? 'ai-info' : 'ai-warning');
+      }
+      if ((diagnosticView || snapshot.error) && snapshot.requestId)
+        note(status, `请求编号：${snapshot.requestId}`, 'ai-note');
       if (snapshot.recoverable) note(status, '请点“重试原请求”核对同一请求；确认前不能重新发送。若放弃追问上下文，可明确开启新会话。', 'ai-warning');
-      else if (snapshot.phase === 'error' && snapshot.context?.synced)
+      else if (snapshot.phase === 'error' && snapshot.context?.synced && !diagnosticView)
         note(status, '需求仍在输入框中；可修改后重新发送，或开启新会话整理完整需求。', 'ai-info');
       results.replaceChildren();
       if (arr(snapshot.transcript).length) {
@@ -517,6 +572,8 @@ export function setupAiUI({ model, getContext, prepareContext, onAuthError = () 
               const actionSection = node('section', 'ai-one-click');
               actionSection.append(node('h3', '', '加入指令区'));
               note(actionSection, '确认金额与期限后加入指令区。');
+              if (planning.result.remediation?.requiresManagerConfirmation)
+                remediationConsent(actionSection, 'ai-stage-remediation-consent');
               if (executable.some(role => role === 'alternative' || planning.result[role]?.requiresTargetChange)) {
                 const consent = node('label', 'ai-consent');
                 const checkbox = node('input'); checkbox.type = 'checkbox'; checkbox.id = 'ai-stage-target-consent';
@@ -540,8 +597,8 @@ export function setupAiUI({ model, getContext, prepareContext, onAuthError = () 
     }
     // Keep a stable text node during streaming. Never scroll or rebuild cards for
     // a preview update; only the completed result above can render plan actions.
-    const previewValue = snapshot.phase === 'running' && !snapshot.recovering && !snapshot.result
-      ? snapshot.previewText || '' : '';
+    const previewValue = displayText(snapshot.phase === 'running' && !snapshot.recovering && !snapshot.result
+      ? snapshot.previewText || '' : '');
     preview.hidden = !previewValue;
     if (previewText.textContent !== previewValue) previewText.textContent = previewValue;
     const progressStatus = status.querySelector('.ai-stream-status');
@@ -574,7 +631,8 @@ export function setupAiUI({ model, getContext, prepareContext, onAuthError = () 
       if (!candidate?.applicable) throw new Error('所选方案未通过本地复核，不能加入指令区。');
       if ((role === 'alternative' || candidate.requiresTargetChange) && !consent)
         throw new Error('请先明确同意调整逆回购固定目标。');
-      const outcome = draft.confirm(role, { acceptTargetChanges: consent });
+      const outcome = draft.confirm(role, { acceptTargetChanges: consent,
+        acceptRemediation: $('#ai-stage-remediation-consent')?.checked === true });
       if (outcome.error) throw new Error(outcome.error);
       if (outcome.appliedRole !== role) throw new Error('未完成方案加入。');
       committed = true; applied = true;
@@ -628,6 +686,8 @@ export function setupAiUI({ model, getContext, prepareContext, onAuthError = () 
         if (result.search?.complete === false) helpNote(section, '本地搜索未穷尽。');
         const confirmable = result.serverMismatch ? [] : ['main', 'alternative']
           .filter(role => result[role]?.applicable && result[role]?.draftId);
+        if (confirmable.length && result.remediation?.requiresManagerConfirmation)
+          remediationConsent(section, 'ai-remediation-consent');
         if (confirmable.includes('alternative') || confirmable.includes('main') && result.main?.requiresTargetChange) {
           const consent = node('label', 'ai-consent');
           const checkbox = node('input'); checkbox.type = 'checkbox'; checkbox.id = 'ai-target-consent';
@@ -667,7 +727,8 @@ export function setupAiUI({ model, getContext, prepareContext, onAuthError = () 
       if (JSON.stringify(latest ?? null) !== JSON.stringify(currentContext)) {
         refresh(); throw new Error('运行已变化，请重新获取AI建议。');
       }
-      draft.confirm(role, { acceptTargetChanges: consent });
+      draft.confirm(role, { acceptTargetChanges: consent,
+        acceptRemediation: $('#ai-remediation-consent')?.checked === true });
       const outcome = draft.snapshot();
       if (outcome.error) throw new Error(outcome.error);
       if (outcome.appliedRole !== role) throw new Error('本地确认未完成');

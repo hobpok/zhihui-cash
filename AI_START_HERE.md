@@ -14,11 +14,15 @@
 
 ## 当前状态
 
-应用版本为 **6-0.29.0**，版本初始化标记仍为 **6-0.28.0**。已按该标记初始化的账号不会因本次升级重置，未初始化账号沿用既有一次初始化流程。默认是公司级三项银行约束六笔计划（revision 2），另一套为保持原内容的原始零现金九笔计划。选择样例会新建运行并保留旧运行历史。云端版本初始化逻辑保留在后端源码供理解；本地静态预览只使用浏览器存储，不会进入生产账户。旧浏览器已有数据时，不会仅因刷新就迁移模板。
+应用版本为 **6-0.38.0**，版本初始化标记仍为 **6-0.28.0**。已按该标记初始化的账号不会因本次升级重置，未初始化账号沿用既有一次初始化流程。默认是公司级三项银行约束六笔计划（revision 2），原始零现金九笔计划保持；新增五笔“补救案例（未预设卖券）”。选择样例会新建运行并保留旧运行历史。云端版本初始化逻辑保留在后端源码供理解；本地静态预览只使用浏览器存储，不会进入生产账户。旧浏览器已有数据时，不会仅因刷新就迁移模板。
 
 本仓库是经过整理的公开快照。历史资料、生产运行记录与原始附件不在这里；缺少它们不意味着需要编造数据、重建账号或重复发布。后续同步由负责人审核后进行，不能假设它实时等同正在开发的目录。
 
 默认样例展示两种顺序约束：广州公司敞口先从79/1000=7.9%降至7.7%，才可整笔存3亿元到8%；直接存款会到8.2%并阻断。江南从58/1000=5.8%先整笔存2亿元到6%，再买存单1亿元到6.1%；逆序会阻断存款。存款在计算、下达、成交和撤销环节均按整笔处理，历史部分成交的剩余金额也按整笔处理；其他品种仍允许符合规则的安全部分成交。投管环节按实际成交状态提示顺序并拦截受限动作，AI解释须给出上述正反顺序和数字。
+
+补救案例去掉初始卖券计划，保留存量广州银行CD持仓。计算发现存款未安排时，或AI明确规划完整计划／寻找补救时，会核算补卖CD 2亿元：实际成交后敞口77亿，整笔存3亿后80亿／8%。融资49亿、逆回购20亿及原投资目标保留；新增卖券必须单独勾选同意，随后仍须重算、审核及手动下达。搜索同银行CD优先、支持银行债和组合，默认最多24个候选、8项持仓；未找到不表示全局无解，明确禁卖会阻止自动补救。AI依据错误分类并支持受校验的摘要恢复，不能把旧引用或无效候选修成通过。
+
+本次同步包含6-0.30至6-0.37的剩余计划排单、渐进改善统一口径、成交／结算入口简化、当前比例及下一笔融资只读核验、云冲突恢复、AI语言解析、重复计算削减和逆回购较小现金分片搜索。细节见[业务说明](docs/业务流程与指标.md)。
 
 ## 按问题找代码
 
@@ -32,6 +36,8 @@
 | 工作台操作与诊断解释 | [ui.js](app/ui.js)、[c-ui.js](app/c-ui.js)、[readiness-diagnostics.js](app/readiness-diagnostics.js) |
 | 指标目录和只读分析 | [analysis.js](app/analysis.js)、[metric-catalog.js](app/metric-catalog.js) |
 | AI 候选、流式结果与人工确认 | [ai-conversation.js](app/ai-conversation.js)、[ai-draft.js](app/ai-draft.js)、[ai-dialogue.js](server/ai-dialogue.js)、[ai-service.js](server/ai-service.js) |
+| 无预设卖券的发现与确认 | [remediation.js](app/remediation.js)、[remediation-ui.js](app/remediation-ui.js)、[remediation.test.js](app/remediation.test.js)、[remediation-integration.test.js](server/remediation-integration.test.js) |
+| 当前比例缺口与下一笔融资 | [planning-tools.js](server/planning-tools.js)、[next-trade-funding.js](server/next-trade-funding.js)、[next-trade-funding.test.js](server/next-trade-funding.test.js) |
 | 云存档、认证、版本初始化的设计 | [api.js](server/api.js)、[storage.js](server/storage.js)、[migrations](migrations)；未提供部署配置与账户 |
 
 ## 提意见时注意
