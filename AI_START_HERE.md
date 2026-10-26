@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-应用版本为 **6-0.39.0**，版本初始化标记仍为 **6-0.28.0**。新默认是五笔“补救案例（默认，未预设卖券）”；旧六笔“三项银行约束（预设卖券）”（revision 2）和原始零现金九笔计划继续可选。已按标记初始化的账号不会因本次升级重置，未初始化账号沿用既有一次初始化流程。已有账号／浏览器数据要体验新默认，须在“初始数据”手动点击一次默认补救案例，保留旧运行历史并新建运行。云端版本初始化逻辑保留在后端源码供理解；本地静态预览只使用浏览器存储，不会进入生产账户。刷新不会自动覆盖旧模板或运行。
+应用版本为 **6-0.40.0**，版本初始化标记仍为 **6-0.28.0**。默认是五笔“补救案例（默认，未预设卖券）”；旧六笔“三项银行约束（预设卖券）”（revision 2）和原始零现金九笔计划继续可选。每个账号自己在“数据与存储→重置当前运行副本”确认后，无论当前是旧样例还是自定义模板，均把本账号模板和运行改为五笔无卖券案例；原运行及成交先保留历史，新副本清除交易进度和审核。此按钮仅作用于当前账号，不会批量重置其他账号。本地备份／模板保存失败不替换运行，账号不可编辑时阻止重置。已按标记初始化的账号不会仅因升级或刷新自动重置，未初始化账号沿用既有一次初始化流程；初始数据页仍可显式选择三套样例。云端初始化源码供理解，本地静态预览只使用浏览器存储，不会进入生产账户。
 
 本仓库是经过整理的公开快照。历史资料、生产运行记录与原始附件不在这里；缺少它们不意味着需要编造数据、重建账号或重复发布。后续同步由负责人审核后进行，不能假设它实时等同正在开发的目录。
 
@@ -30,6 +30,7 @@
 |---|---|
 | 默认五笔、旧六笔及原始九笔样例 | [default-scenario.js](app/default-scenario.js)、[original-scenario.js](app/original-scenario.js)、对应 `.test.js` |
 | 初始数据格式、金额单位与模板切换 | [initial-data.js](app/initial-data.js)、[initial-ui.js](app/initial-ui.js)、[initial-ui-presets.test.js](app/initial-ui-presets.test.js) |
+| 当前账号重置与历史保护 | [ui.js](app/ui.js) 的 `reset`、[initial-ui.js](app/initial-ui.js) 的 `resetToDefault`／`begin`、[initial-ui-presets.test.js](app/initial-ui-presets.test.js) |
 | 现金、敞口、期限的规则结果 | [core-rules.js](app/core-rules.js)、[core-rules.test.js](app/core-rules.test.js) |
 | 计划排序、批次计算、可执行容量 | [engine.js](app/engine.js)、[calculation-controller.js](app/calculation-controller.js)、[planning-solver.js](app/planning-solver.js) |
 | 下达、成交、结算、撤改与占用 | [model.js](app/model.js)、[execution.js](app/execution.js)、[business.js](app/business.js) |
