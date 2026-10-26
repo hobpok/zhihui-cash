@@ -11,26 +11,27 @@ export const CORE_RULE_NAMES = {
   C08:'BB类银行占银行净资产', C09:'平均剩余期限',
 };
 
-export function setupCoreUI({model,$,esc,amount,decimalYuan,parseMoney,getSkipReview=()=>false,
+export function setupCoreUI({model,$,esc,escRaw=esc,amount,decimalYuan,parseMoney,getSkipReview=()=>false,
   tag,resultName,resultTone,readableText,stepName,
   openDialog,closeDialog,formError,formFooter,changed,render,setScreen}) {
   let ruleFilter='all',rulesExpanded=false,dispatchBusinessCache=null;
   const rowsOf=s=>s.coreRules?.rows||[];
-  const value=(row,key)=>{
+  // Formatting reads the caller's current view; it must not recompute model state per cell.
+  const value=(row,key,s)=>{
     const n=row[key];
     if(n==null)return row.result==='not_applicable'?'—':'待补';
     if(typeof n==='object')return n.display??n.value??'待补';
     if(typeof n==='string'&&!Number.isFinite(Number(n)))return n;
     const number=Number(n);
     if(row.ruleId==='C01')return `${amount(number)} 亿`;
-    if(row.ruleId==='C09')return `${number.toFixed(2)} ${model.getState().initialData?.demoMode==='single-day-principal-v1'?'天':'交易日'}`;
+    if(row.ruleId==='C09')return `${number.toFixed(2)} ${s.initialData?.demoMode==='single-day-principal-v1'?'天':'交易日'}`;
     return `${(number*100).toFixed(4).replace(/0+$/,'').replace(/\.$/,'')}%`;
   };
-  const threshold=row=>{const t=row.threshold,simple=model.getState().initialData?.demoMode==='single-day-principal-v1';if(t==null)return ({C01:'≥0元',C02:'≥5%',C03:'≤5%',C04:'≤20%',C05:'≤10%','C05-DEPOSIT':`新增存款后≤${bankDepositLimitBps(model.getState().initialData?.banks?.find(b=>b.bankId===row.subjectId))/100}%`,C06:'≤15%',C07:'≤2%',C08:'≤5%',C09:simple?'≤90天':'≤90交易日'})[row.ruleId]||'待补';if(typeof t!=='object')return t;if(t.numerator!=null&&t.denominator)return `${t.operator||''}${(t.numerator/t.denominator*100).toFixed(4).replace(/0+$/,'').replace(/\.$/,'')}%`;return `${t.operator||''}${t.value??t.valueDays??t.valueTradingDays??t.valueYuan??t.days??t.amountYuan??''}${row.ruleId==='C09'?(simple?'天':'交易日'):row.ruleId==='C01'?'元':''}`;};
+  const threshold=(row,s)=>{const t=row.threshold,simple=s.initialData?.demoMode==='single-day-principal-v1';if(t==null)return ({C01:'≥0元',C02:'≥5%',C03:'≤5%',C04:'≤20%',C05:'≤10%','C05-DEPOSIT':`新增存款后≤${bankDepositLimitBps(s.initialData?.banks?.find(b=>b.bankId===row.subjectId))/100}%`,C06:'≤15%',C07:'≤2%',C08:'≤5%',C09:simple?'≤90天':'≤90交易日'})[row.ruleId]||'待补';if(typeof t!=='object')return t;if(t.numerator!=null&&t.denominator)return `${t.operator||''}${(t.numerator/t.denominator*100).toFixed(4).replace(/0+$/,'').replace(/\.$/,'')}%`;return `${t.operator||''}${t.value??t.valueDays??t.valueTradingDays??t.valueYuan??t.days??t.amountYuan??''}${row.ruleId==='C09'?(simple?'天':'交易日'):row.ruleId==='C01'?'元':''}`;};
   function rowDetail(s,row){
     openDialog(`${row.name||CORE_RULE_NAMES[row.ruleId]} · ${displayLabel(row.subjectLabel)||'组合'}`,
       `<p>${tag(resultTone(row.result),resultName(row.result))} ${esc(row.reason||'按当前输入判断')}</p>`+
-      `<div class="core-detail-grid"><p>当前值<b>${esc(value(row,'currentValue'))}</b></p><p>预计值<b>${esc(value(row,'projectedValue'))}</b></p><p>阈值<b>${esc(threshold(row))}</b></p><p>金额余量<b>${row.headroomYuan==null?'待补 / 不适用':amount(row.headroomYuan)+' 亿'}</b></p></div>`+
+      `<div class="core-detail-grid"><p>当前值<b>${esc(value(row,'currentValue',s))}</b></p><p>预计值<b>${esc(value(row,'projectedValue',s))}</b></p><p>阈值<b>${esc(threshold(row,s))}</b></p><p>金额余量<b>${row.headroomYuan==null?'待补 / 不适用':amount(row.headroomYuan)+' 亿'}</b></p></div>`+
       `<p>数据日期：${esc(s.context.businessDate)}。当前运行第${s.revision}版；来源为本运行初始模板与已录入的业务事件。显示舍入不参与放行。</p>`+
       `${row.needed?.length?`<p class="warning">需要补充：${esc(readableText(s,row.needed.join('、')))}</p>`:''}`+
       `<details class="technical-details"><summary>查看公式输入、来源及规则编号</summary><pre>${esc(JSON.stringify(row,null,2))}</pre></details>`);
@@ -38,7 +39,7 @@ export function setupCoreUI({model,$,esc,amount,decimalYuan,parseMoney,getSkipRe
   function ruleTable(s,filter='all'){
     const rows=rowsOf(s).filter(r=>filter==='all'||r.result===filter);
     return `<div class="table-scroll"><table class="core-rule-table"><thead><tr><th>规则 / 主体</th><th>当前值</th><th>阈值</th><th>余量</th><th>状态与依据</th><th>核对</th></tr></thead><tbody>`+
-      rows.map(r=>`<tr><td><b>${esc(r.name||CORE_RULE_NAMES[r.ruleId])}</b><small>${esc(displayLabel(r.subjectLabel)||'当前组合')}</small></td><td class="metric-${metricPresentation(r).tone}">${esc(value(r,'currentValue'))}</td><td>${esc(threshold(r))}</td><td>${r.headroomYuan==null?'—':amount(r.headroomYuan)+' 亿'}</td><td>${tag(resultTone(r.result),resultName(r.result))}<small>${esc(r.reason||'')}</small></td><td><button data-core-detail="${rowsOf(s).indexOf(r)}">依据</button></td></tr>`).join('')+
+      rows.map(r=>`<tr><td><b>${esc(r.name||CORE_RULE_NAMES[r.ruleId])}</b><small>${esc(displayLabel(r.subjectLabel)||'当前组合')}</small></td><td class="metric-${metricPresentation(r).tone}">${esc(value(r,'currentValue',s))}</td><td>${esc(threshold(r,s))}</td><td>${r.headroomYuan==null?'—':amount(r.headroomYuan)+' 亿'}</td><td>${tag(resultTone(r.result),resultName(r.result))}<small>${esc(r.reason||'')}</small></td><td><button data-core-detail="${rowsOf(s).indexOf(r)}">依据</button></td></tr>`).join('')+
       (rows.length?'':'<tr><td colspan="6" class="empty-record">没有匹配的规则结果</td></tr>')+'</tbody></table></div>';
   }
   function renderRules(s){
@@ -50,7 +51,7 @@ export function setupCoreUI({model,$,esc,amount,decimalYuan,parseMoney,getSkipRe
     $('core-rule-content').innerHTML=enabled?ruleTable(s,ruleFilter):'';
     if(enabled){
       const cash=rows.find(r=>r.ruleId==='C02'),term=rows.find(r=>r.ruleId==='C09');
-      $('rule-summary-mini').innerHTML=`<div class="mini-heading"><b>核心规则 · 当前值</b><span>${definedCount}条已定义约束</span></div><p>现金比例：${esc(cash?value(cash,'currentValue'):'待补')} · 下限5%</p><p>平均剩余期限：${esc(term?value(term,'currentValue'):'待补')} · 上限90${s.initialData?.demoMode==='single-day-principal-v1'?'天':'交易日'}</p><p>按银行、品种及公司聚合；新增存款另按公司货基同银行敞口／银行季度净资产校验：默认6%，该行批准8%，等于限额允许。</p><p class="muted">当前状态与本次交易放行分别判断，具体下达仍须最新复核。</p>`;
+      $('rule-summary-mini').innerHTML=`<div class="mini-heading"><b>核心规则 · 当前值</b><span>${definedCount}条已定义约束</span></div><p>现金比例：${esc(cash?value(cash,'currentValue',s):'待补')} · 下限5%</p><p>平均剩余期限：${esc(term?value(term,'currentValue',s):'待补')} · 上限90${s.initialData?.demoMode==='single-day-principal-v1'?'天':'交易日'}</p><p>按银行、品种及公司聚合；新增存款另按公司货基同银行敞口／银行季度净资产校验：默认6%，该行批准8%，等于限额允许。</p><p class="muted">当前状态与本次交易放行分别判断，具体下达仍须最新复核。</p>`;
     }
   }
   function renderProgress(s){
@@ -127,7 +128,7 @@ export function setupCoreUI({model,$,esc,amount,decimalYuan,parseMoney,getSkipRe
   function rulesDialog(){
     const s=model.getState();
     const count=new Set(rowsOf(s).map(r=>r.ruleId)).size;
-    openDialog('已定义规则与判断依据',`<p>${count}条已定义规则按适用主体展开，判断数量可能超过规则条数。新增存款闸门＝（本基金与公司其他货基同银行存款＋存单＋银行债）／银行季度净资产；新增存款后不得超过该行参数，默认6%，该行批准8%，等于限额允许。仅新增存款触发；存单买入仍须通过其他适用规则。演示8%为合成批准参数，未连接真实审批系统。现有敞口不据此直接标为违规。现金比例与基金集中度以基金净值为分母；单日模式的C09期限以基金净值加存续正回购本金为分母。</p>${ruleTable(s)}<p>当前值、预计值、输入时点和计算证据均可逐项查看。</p>`);
+    openDialog('已定义规则与判断依据',`<p>${count}条已定义规则按适用主体展开，判断数量可能超过规则条数。新增存款闸门＝（本基金与公司其他货基同银行存款＋存单＋银行债）／银行季度净资产；新增存款后不得超过该行参数，默认6%，该行批准8%，等于限额允许。仅新增存款触发；存单买入仍须通过其他适用规则。现有敞口不据此直接标为违规。现金比例与基金集中度以基金净值为分母；单日模式的C09期限以基金净值加存续正回购本金为分母。</p>${ruleTable(s)}<p>当前值、预计值、输入时点和计算证据均可逐项查看。</p>`);
   }
   function batchDialog(){
     const s=model.getState(),skipReview=Boolean(getSkipReview());
@@ -156,7 +157,7 @@ export function setupCoreUI({model,$,esc,amount,decimalYuan,parseMoney,getSkipRe
         (balances.get(p.planId)?.arrangeableYuan??0)>0).map(plan=>({plan,step:null}))];
     const complete=s.plans.filter(p=>(balances.get(p.planId)?.arrangeableYuan??0)===0);
     openDialog('手动批量下达指令',`<form id="batch-form"><div class="batch-sticky-summary" aria-live="polite"><div class="batch-summary-metrics"><strong id="batch-selected-count">已选 0 笔</strong><span id="batch-inflow">流入 0 亿</span><span id="batch-outflow">流出 0 亿</span></div><div class="batch-summary-status"><span id="batch-validation-status">待复核</span><span id="batch-approval-status">审核待核</span></div></div><div id="batch-scroll-content" class="batch-scroll-content" tabindex="0" role="region" aria-label="批次指令与重算结果"><p class="origin-note">勾选指令并核对金额、顺序；变更后重新计算。</p><div class="batch-toolbar"><button id="batch-refresh" type="button">核对并刷新当前数据</button><button id="batch-recalculate" type="button" class="primary">按所选顺序和金额重新计算</button></div><label class="batch-select-all"><input id="batch-select-all" type="checkbox" ${plans.length?'':'disabled'}>全选未完成指令</label><div id="batch-options" class="batch-options" role="list" aria-label="本次批次顺序">`+
-      plans.map(({plan:p,step:st})=>{const b=balances.get(p.planId),cap=Math.min(st?.nominalYuan??b.arrangeableYuan,b.arrangeableYuan);return `<div class="batch-option batch-edit-row" role="listitem" data-plan-id="${esc(p.planId)}" data-step-id="${esc(st?.stepId||'')}"><span class="batch-drag-handle" aria-hidden="true" title="拖拽调整顺序">⋮⋮</span><label class="batch-select"><input type="checkbox" name="planId" value="${esc(p.planId)}" ${st&&defaultSelected.has(st.stepId)?'checked':''}><span class="batch-order-number"></span><b>${esc(displayLabel(p.label))}</b></label><label class="batch-money">本次金额（亿元）<input class="batch-amount" inputmode="decimal" autocomplete="off" value="${esc(decimalYuan(cap))}" aria-label="${esc(displayLabel(p.label))}本次金额，单位亿元"></label><span class="batch-move"><button type="button" data-batch-move="up" aria-label="上移${esc(displayLabel(p.label))}">↑</button><button type="button" data-batch-move="down" aria-label="下移${esc(displayLabel(p.label))}">↓</button></span><small class="batch-row-reason" aria-live="polite"></small><details class="batch-step-meta"><summary>明细</summary><span>${st?`计算步骤 ${st.sequenceIndex||''} · ${amount(st.nominalYuan)} 亿`:'未列入原推荐'} · 意向 ${amount(b.targetYuan)} 亿 · 已下达 ${amount(b.filledYuan+b.lockedYuan)} 亿 · 未下达 ${amount(b.arrangeableYuan)} 亿 · 已成交 ${amount(b.filledYuan)} 亿 · 本次金额可安排范围 0–${amount(b.arrangeableYuan)} 亿</span></details></div>`;}).join('')+
+      plans.map(({plan:p,step:st})=>{const b=balances.get(p.planId),cap=Math.min(st?.nominalYuan??b.arrangeableYuan,b.arrangeableYuan);return `<div class="batch-option batch-edit-row" role="listitem" data-plan-id="${escRaw(p.planId)}" data-step-id="${escRaw(st?.stepId||'')}"><span class="batch-drag-handle" aria-hidden="true" title="拖拽调整顺序">⋮⋮</span><label class="batch-select"><input type="checkbox" name="planId" value="${escRaw(p.planId)}" ${st&&defaultSelected.has(st.stepId)?'checked':''}><span class="batch-order-number"></span><b>${esc(displayLabel(p.label))}</b></label><label class="batch-money">本次金额（亿元）<input class="batch-amount" inputmode="decimal" autocomplete="off" value="${escRaw(decimalYuan(cap))}" aria-label="${esc(displayLabel(p.label))}本次金额，单位亿元"></label><span class="batch-move"><button type="button" data-batch-move="up" aria-label="上移${esc(displayLabel(p.label))}">↑</button><button type="button" data-batch-move="down" aria-label="下移${esc(displayLabel(p.label))}">↓</button></span><small class="batch-row-reason" aria-live="polite"></small><details class="batch-step-meta"><summary>明细</summary><span>${st?`计算步骤 ${st.sequenceIndex||''} · ${amount(st.nominalYuan)} 亿`:'未列入原推荐'} · 意向 ${amount(b.targetYuan)} 亿 · 已下达 ${amount(b.filledYuan+b.lockedYuan)} 亿 · 未下达 ${amount(b.arrangeableYuan)} 亿 · 已成交 ${amount(b.filledYuan)} 亿 · 本次金额可安排范围 0–${amount(b.arrangeableYuan)} 亿</span></details></div>`;}).join('')+
       (plans.length?'':'<p>全部意向已成交或下达占用；请核对投管事实。</p>')+
       `</div>${complete.length?`<details class="batch-complete-note"><summary>已完成或全部占用 · ${complete.length}笔</summary>${complete.map(p=>{const b=balances.get(p.planId);return `<p>${esc(displayLabel(p.label))} · 意向 ${amount(b.targetYuan)} 亿 · 已下达 ${amount(b.filledYuan+b.lockedYuan)} 亿 · 未下达 ${amount(b.arrangeableYuan)} 亿 · 已成交 ${amount(b.filledYuan)} 亿</p>`;}).join('')}</details>`:''}<div class="batch-preview" aria-live="polite"><b>所选顺序重算结果</b><p id="batch-preview-summary">请点击重新计算。</p><ol id="batch-preview-rows"></ol></div></div><div class="batch-sticky-footer"><label class="checkline"><input type="checkbox" name="confirmed" required><span id="batch-confirm-text">我已核对重算后的对象、金额、顺序、逐笔结果，并确认手动下达</span></label><p id="batch-submit-reason" class="batch-submit-reason" role="status"></p>${formFooter('确认下达所选0笔')}</div></form>`);
     const form=$('batch-form'),list=$('batch-options'),selectAll=$('batch-select-all'),submit=form.querySelector('button[type="submit"]');
@@ -169,9 +170,8 @@ export function setupCoreUI({model,$,esc,amount,decimalYuan,parseMoney,getSkipRe
     const rows=()=>[...list.querySelectorAll('.batch-edit-row')];
     let validationMessage='尚未复核所选指令';
     let snapshotExpiryTimer=null;
-    const updateBatchChrome=()=>{
+    const updateBatchChrome=(now=model.getState())=>{
       const selected=rows().filter(row=>row.querySelector('[name="planId"]').checked);
-      const now=model.getState();
       const sums={inflow:0n,outflow:0n},invalid={inflow:false,outflow:false};
       let unknownDirection=false;
       for(const row of selected){
@@ -233,7 +233,7 @@ export function setupCoreUI({model,$,esc,amount,decimalYuan,parseMoney,getSkipRe
         throw new Error(`${displayLabel(s.plans.find(p=>p.planId===row.dataset.planId)?.label)}金额错误：${error.message||String(error)}`);
       }
     });
-    const preview=()=>{
+    const preview=(now=model.getState())=>{
       numberRows();
       syncSelectAll();
       const summary=$('batch-preview-summary'),details=$('batch-preview-rows');
@@ -242,14 +242,15 @@ export function setupCoreUI({model,$,esc,amount,decimalYuan,parseMoney,getSkipRe
       summary.textContent='顺序或金额已变更，请点击“按所选顺序和金额重新计算”；原结果已失效。';
       details.replaceChildren();
       rows().forEach(row=>row.querySelector('.batch-row-reason').textContent=row.querySelector('[name="planId"]').checked?'待重新计算':'未选，本次不发送');
-      updateBatchChrome();
+      updateBatchChrome(now);
     };
-    const selectionChanged=(clearConfirmation=true)=>{
+    // Reuse a view only inside this synchronous interaction; later events read fresh facts.
+    const selectionChanged=(clearConfirmation=true,now=model.getState())=>{
       numberRows();syncSelectAll();
       if(clearConfirmation)form.elements.confirmed.checked=false;
-      if(!recalculated||model.getState().revision!==recalculated.revision){preview();return;}
+      if(!recalculated||now.revision!==recalculated.revision){preview(now);return;}
       let chosen;
-      try{chosen=selectedItems();}catch{preview();return;}
+      try{chosen=selectedItems();}catch{preview(now);return;}
       const byStep=new Map(recalculated.baseRows.map((row,index)=>[row.stepId,{...row,index}]));
       const selected=chosen.map(item=>({item,base:byStep.get(item.stepId)}));
       const basisChanged=selected.some(({item,base},index)=>!base||item.nominalYuan!==base.nominalYuan||
@@ -259,7 +260,7 @@ export function setupCoreUI({model,$,esc,amount,decimalYuan,parseMoney,getSkipRe
         row.querySelector('.batch-row-reason').textContent=!checked?'未选，本次不发送':
           basisChanged?'金额或顺序已变更，须重新计算（旧结果已失效）':
           !base?'新增或调整步骤，须重新计算':
-          !base.ready?`原计算阻断：${readableText(model.getState(),base.reason||'当前计算步骤不可审核')}`:
+          !base.ready?`原计算阻断：${readableText(now,base.reason||'当前计算步骤不可审核')}`:
           '原计算步骤，待最新逐前缀复核';
       });
       const unchanged=selected.length>0&&selected.every(({item,base},index)=>base?.ready&&
@@ -269,7 +270,7 @@ export function setupCoreUI({model,$,esc,amount,decimalYuan,parseMoney,getSkipRe
         validationMessage='所选步骤或金额、顺序须重新计算';
         $('batch-preview-summary').textContent='所选步骤包含未通过项，或金额、顺序、范围已变更；请调整选择或重新计算。';
         $('batch-preview-rows').replaceChildren();
-        updateBatchChrome();
+        updateBatchChrome(now);
         return;
       }
       const items=selected.map(({base})=>({stepId:base.stepId,nominalYuan:base.nominalYuan}));
@@ -279,52 +280,52 @@ export function setupCoreUI({model,$,esc,amount,decimalYuan,parseMoney,getSkipRe
         validationMessage=check.ready?'逐前缀复核通过':'逐前缀复核受阻';
         rows().forEach(row=>{if(row.querySelector('[name="planId"]').checked){
           const gate=check.rows.find(item=>item.stepId===row.dataset.stepId);
-          row.querySelector('.batch-row-reason').textContent=`${gate?.ready?'可下达':'阻断'}：${readableText(model.getState(),gate?.reason||check.reason)}`;
+          row.querySelector('.batch-row-reason').textContent=`${gate?.ready?'可下达':'阻断'}：${readableText(now,gate?.reason||check.reason)}`;
         }});
-        $('batch-preview-rows').innerHTML=check.rows.map((row,i)=>`<li>${i+1}. ${esc(displayLabel(model.getState().plans.find(p=>p.planId===
-          model.getState().proposal.steps.find(step=>step.stepId===row.stepId)?.planId)?.label))} · ${esc(decimalYuan(row.nominalYuan))} 亿：${row.ready?'可下达':'阻断'} · ${esc(readableText(model.getState(),row.reason))}</li>`).join('');
+        $('batch-preview-rows').innerHTML=check.rows.map((row,i)=>`<li>${i+1}. ${esc(displayLabel(now.plans.find(p=>p.planId===
+          now.proposal.steps.find(step=>step.stepId===row.stepId)?.planId)?.label))} · ${esc(decimalYuan(row.nominalYuan))} 亿：${row.ready?'可下达':'阻断'} · ${esc(readableText(now,row.reason))}</li>`).join('');
         $('batch-preview-summary').textContent=check.ready?
           `所选 ${items.length} 笔沿用原计算顺序，最新逐前缀校验通过；仍须核对并手动下达。`:
-          `所选批次当前受阻：${readableText(model.getState(),check.reason)}；请重新计算或核对资金与依赖。`;
+          `所选批次当前受阻：${readableText(now,check.reason)}；请重新计算或核对资金与依赖。`;
       }catch(error){
         recalculated.ready=false;
         validationMessage='当前无法复核';
         $('batch-preview-rows').replaceChildren();
         $('batch-preview-summary').textContent=`当前无法复核：${error.message||String(error)}；请核对并刷新当前数据。`;
       }
-      updateBatchChrome();
+      updateBatchChrome(now);
     };
-    const recalculateSelected=()=>{
+    const recalculateSelected=(current=model.getState())=>{
       const items=selectedItems();
       if(!items.length)throw new Error('请至少勾选一笔未完成指令。');
       if(new Set(items.map(item=>item.planId)).size!==items.length)
         throw new Error('同一计划的多笔原计算步骤可按原金额和顺序直接下达；若要改金额或顺序，请逐笔选择并重算。');
-      const currentSteps=new Map((model.getState().proposal?.steps||[]).map(step=>[step.stepId,step]));
+      const currentSteps=new Map((current.proposal?.steps||[]).map(step=>[step.stepId,step]));
       if(items.some(item=>item.stepId&&!currentSteps.has(item.stepId)&&
         calculated.filter(step=>step.planId===item.planId).length>1))
         throw new Error('该计划的分次方案已变化，请返回交易台重新计算后再调整。');
       const result=model.recalculateDispatchBatch(items.map(({planId,stepId,nominalYuan})=>({
         planId,nominalYuan,...(stepId&&currentSteps.get(stepId)?.planId===planId?{sourceStepId:stepId}:{})
-      }))),now=model.getState();
+      })));
       const chosen=rows().filter(row=>row.querySelector('[name="planId"]').checked);
       chosen.forEach((row,index)=>row.dataset.stepId=result.recalculationRows[index].stepId);
-      recalculated={revision:now.revision,baseRows:result.recalculationRows,
+      recalculated={revision:result.revision,baseRows:result.recalculationRows,
         items:result.recalculationRows.map(row=>({stepId:row.stepId,nominalYuan:row.nominalYuan})),ready:result.recalculationReady};
-      selectionChanged();
       return result;
     };
     $('batch-recalculate').onclick=()=>{try{
-      recalculateSelected();untouched=false;
+      const now=recalculateSelected();selectionChanged(true,now);untouched=false;
       changed('所选批次已重新计算；请核对结果后手动下达。');
     }catch(error){validationMessage='重新计算失败';if(recalculated)recalculated.ready=false;updateBatchChrome();formError(error);}};
-    form.elements.confirmed.addEventListener('change',updateBatchChrome);
+    form.elements.confirmed.addEventListener('change',()=>updateBatchChrome());
     selectAll.addEventListener('change',()=>{
       untouched=false;
       rows().forEach(row=>row.querySelector('[name="planId"]').checked=selectAll.checked);
       selectionChanged();
     });
-    list.addEventListener('input',()=>{untouched=false;selectionChanged();});
-    list.addEventListener('change',()=>{untouched=false;selectionChanged();});
+    // Browsers emit both input and change for checkboxes; process each control once.
+    list.addEventListener('input',event=>{if(!event.target.matches('.batch-amount'))return;untouched=false;selectionChanged();});
+    list.addEventListener('change',event=>{if(!event.target.matches('[name="planId"]'))return;untouched=false;selectionChanged();});
     list.addEventListener('click',event=>{
       const button=event.target.closest('[data-batch-move]');if(!button)return;
       untouched=false;
@@ -439,15 +440,15 @@ export function setupCoreUI({model,$,esc,amount,decimalYuan,parseMoney,getSkipRe
       listeners.abort();
     },{signal:listeners.signal});
     $('batch-refresh').onclick=()=>{try{
-      const now=model.refreshSnapshot();
+      let now=model.refreshSnapshot();
       if(recalculated)recalculated.revision=now.revision;
-      const staleCalculation=recalculated&&model.getState().proposal?.pathId==='CUSTOM-ORDER'&&
+      const staleCalculation=recalculated&&now.proposal?.pathId==='CUSTOM-ORDER'&&
         recalculated.baseRows.some(row=>!row.ready&&/快照过期|尚未刷新/.test(row.reason||''));
       if(staleCalculation){
         const current=selectedItems();
         const base=new Map(recalculated.baseRows.map(row=>[row.stepId,row]));
         if(current.length&&current.every(item=>base.get(item.stepId)?.nominalYuan===item.nominalYuan)&&
-          new Set(current.map(item=>item.planId)).size===current.length)recalculateSelected();
+          new Set(current.map(item=>item.planId)).size===current.length)now=recalculateSelected(now);
       }
       if(untouched&&!rows().some(row=>row.querySelector('[name="planId"]').checked)){
         const candidates=[];
@@ -460,27 +461,28 @@ export function setupCoreUI({model,$,esc,amount,decimalYuan,parseMoney,getSkipRe
           }}catch{/* Keep the step unselected until its facts can be checked. */}
         }
       }
-      selectionChanged();
+      selectionChanged(true,now);
       changed('当前执行快照已刷新；请核对批次结果。');
     }catch(e){validationMessage='刷新或复核失败';if(recalculated)recalculated.ready=false;updateBatchChrome();formError(e);}};
     form.onsubmit=e=>{e.preventDefault();try{
-      if(!recalculated?.ready||model.getState().revision!==recalculated.revision)
+      const current=model.getState();
+      if(!recalculated?.ready||current.revision!==recalculated.revision)
         throw new Error('重算结果已失效，请按当前顺序和金额重新计算。');
       const currentItems=selectedItems();
       const expected=recalculated.items;
       if(currentItems.length!==expected.length||currentItems.some((item,i)=>item.nominalYuan!==expected[i].nominalYuan||
-        model.getState().proposal.steps.find(step=>step.stepId===expected[i].stepId)?.planId!==item.planId))
+        current.proposal.steps.find(step=>step.stepId===expected[i].stepId)?.planId!==item.planId))
         throw new Error('批次顺序或金额已变化，请重新计算。');
       if(!model.previewDispatchBatch(expected,{skipReview:true}).ready)
         throw new Error('最新逐前缀校验未通过，请重新计算或核对当前数据。');
-      if(!skipReview&&(model.getState().approvalStatus!=='valid'||
-        model.getState().approval?.authoritySource==='calculated_skip_review'))model.approveProposal();
+      if(!skipReview&&(current.approvalStatus!=='valid'||
+        current.approval?.authoritySource==='calculated_skip_review'))model.approveProposal();
       const result=model.sendCustomBatch(recalculated.items,{skipReview});
       closeDialog();changed('手动批次已逐笔处理，请核对接收结果；成交与收付继续由投管回报确认。');
       const now=model.getState();
       openDialog('本次批量下达结果',`<p>${esc(readableText(now,result.stoppedReason||'本次所选步骤已处理完成。'))}</p><ul>${(result.results||[]).map(r=>`<li><b>${esc(stepName(now,r.stepId))}</b>${r.nominalYuan==null?'':` · ${esc(decimalYuan(r.nominalYuan))} 亿`}：${esc(({accepted:'已登记接收',unknown:'发送未知，保留占用',rejected:'明确拒绝',not_sent:'尚未发送',sent:'已发送',blocked:'校验阻断'})[r.status]||r.status)}${r.reason?' · '+esc(readableText(now,r.reason)):''}</li>`).join('')}</ul><p>未选指令及本批停止后的指令均未发送。部分下达后请重新计算剩余意向金额；成交与收付仍待投管回报。</p><div class="dialog-actions"><button type="button" data-screen="desk">返回交易台</button><button type="button" data-screen="execution" class="primary">前往投管处理</button></div>`);
     }catch(error){validationMessage='下达前复核失败';if(recalculated)recalculated.ready=false;updateBatchChrome();formError(error);}};
-    if(recalculated)selectionChanged(false);else preview();
+    if(recalculated)selectionChanged(false,s);else preview(s);
   }
   // Expansion is view state only; calculations, filtering and approval stay independent.
   $('core-rules-toggle').onclick=()=>{

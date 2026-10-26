@@ -319,11 +319,15 @@ test('dialogue failure categories are allowlisted across storage, status and sam
     const first = await submit(ctx, 'u1', 'reason-check-01');
     assert.equal(first.body.errorCode, 'AI_DIALOGUE_INVALID');
     assert.equal(first.body.diagnosticReason, 'reference_unknown');
+    assert.deepEqual(first.body.diagnostic,{reason:'reference_unknown',recovery:'retry',recovered:false});
+    assert.equal(first.body.requestId,'reason-check-01');
     const status = await ctx.call('u1', '/api/ai/requests/reason-check-01');
     assert.equal(status.body.diagnosticReason, 'reference_unknown');
+    assert.deepEqual(status.body.diagnostic,first.body.diagnostic);
     assert.equal(status.body.text, undefined);
     const replay = await submit(ctx, 'u1', 'reason-check-01');
     assert.equal(replay.body.diagnosticReason, 'reference_unknown');
+    assert.deepEqual(replay.body.diagnostic,first.body.diagnostic);
     assert.equal(calls, 1);
     const row = ctx.sqlite.prepare('SELECT result_json FROM ai_requests WHERE request_id=?').get('reason-check-01');
     assert.deepEqual(JSON.parse(row.result_json), { errorCode: 'AI_DIALOGUE_INVALID', diagnosticReason: 'reference_unknown' });

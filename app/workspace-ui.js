@@ -48,9 +48,9 @@ export function createWorkspaceStorage(raw=localStorage){
  };
 }
 
-export function setupWorkspaceUI({model,initialUI,storage,$,esc,render,notify,clearPersonal,onRestored,onProfileSort,onAiStateChange=()=>{}}){
+export function setupWorkspaceUI({model,initialUI,storage,$,esc,escRaw=esc,render,notify,clearPersonal,onRestored,onProfileSort,onAiStateChange=()=>{}}){
  let mode='checking',user=null,profile=defaults(),initialized=false,generation=0,errorText='',usage=null;
- let history=[],historySelection=null,backedUp=new Map(),panelOpen=false;
+ let history=[],historySelection=null,backedUp=new Map(),panelOpen=false,resolutionToken=null;
  const dialog=$('workspace-dialog'),body=$('workspace-body');
  let sync;
  const aiProxy=createAiProxy({onChange:()=>renderAiProbe(),onAuthError:()=>invalidate('登录状态已变化，请重新验证账号。')});
@@ -71,13 +71,16 @@ export function setupWorkspaceUI({model,initialUI,storage,$,esc,render,notify,cl
  const snapshot=()=>sync?.snapshot()||{documents:[],pending:false};
  const entry=(kind,id)=>snapshot().documents.find(x=>x.kind===kind&&x.id===id);
  const fingerprint=row=>JSON.stringify({revision:row?.revision,value:row?.value,remote:row?.remote,recovery:row?.recovery,recoveries:row?.recoveries});
- const unresolved=()=>snapshot().documents.some(x=>['conflict','recovery','error'].includes(x.status));
- const canEdit=()=>mode==='anonymous'||mode==='cloud'&&initialized&&!unresolved();
+ const unresolved=()=>resolutionToken!==null||snapshot().documents.some(x=>['conflict','recovery','error'].includes(x.status));
+ const deletedDocument=()=>snapshot().documents.some(x=>x.remote?.deleted&&x.value==null);
+ const canEdit=()=>mode==='anonymous'||mode==='cloud'&&initialized&&!unresolved()&&!deletedDocument();
  const canRestore=()=>mode==='cloud'&&!unresolved()&&DOCS.every(([kind,id])=>entry(kind,id)?.loaded);
  function statusText(){
   if(mode==='checking')return '正在验证账号…';
   if(mode==='anonymous')return '匿名使用 · 存档仅在此浏览器';
   if(mode!=='cloud')return errorText||'个人云空间未就绪';
+  if(resolutionToken)return '正在核对并恢复所选副本 · 编辑已暂停';
+  if(deletedDocument())return '个人文档已删除 · 请显式恢复或重建';
   if(!initialized)return errorText||'正在读取个人空间 · 编辑已暂停';
   if(snapshot().pending&&snapshot().documents.some(x=>x.localBackupError))return '本机恢复副本保存失败 · 请立即导出备份';
   const rows=snapshot().documents,priority=['conflict','recovery','error','offline','saving','pending'];
@@ -118,7 +121,7 @@ export function setupWorkspaceUI({model,initialUI,storage,$,esc,render,notify,cl
   return context;
  }
  function invalidate(message){
-  generation++;initialized=false;mode='locked';errorText=message;user=null;profile=defaults();usage=null;history=[];historySelection=null;backedUp.clear();
+  generation++;resolutionToken=null;initialized=false;mode='locked';errorText=message;user=null;profile=defaults();usage=null;history=[];historySelection=null;backedUp.clear();
   aiProxy.setUser(null);
   sync?.disconnect();storage.clearContext();clearPersonal();initialUI.resetStorage();render();
   if(panelOpen)renderPanel();refreshStatus();
@@ -158,7 +161,7 @@ export function setupWorkspaceUI({model,initialUI,storage,$,esc,render,notify,cl
     if(epoch!==generation||mode!=='cloud')return;
     rows=DOCS.map(([kind,id])=>entry(kind,id));
     if(rows.some(row=>!['ready','empty'].includes(row.status)))throw new Error('新版初始数据读取未完成，请刷新重试。');
-    notify(`已更新至 ${APP_RELEASE}，原运行已自动备份到历史，当前使用最新默认演示数据。`);
+    notify(`已更新至 ${APP_RELEASE}，原运行已自动备份到历史，当前使用最新默认数据。`);
    }
   }catch(error){
    if(epoch===generation){errorText=error.code==='REVISION_CONFLICT'?'其他页面已修改运行，请刷新后完成版本更新。':error.message||'版本更新失败，原运行保留，编辑已暂停。';refreshStatus();}
@@ -174,7 +177,7 @@ export function setupWorkspaceUI({model,initialUI,storage,$,esc,render,notify,cl
   render();refreshStatus();if(panelOpen)renderPanel();
  }
  async function verify(){
-  const epoch=++generation;initialized=false;mode='checking';errorText='';user=null;profile=defaults();usage=null;history=[];historySelection=null;backedUp.clear();
+  const epoch=++generation;resolutionToken=null;initialized=false;mode='checking';errorText='';user=null;profile=defaults();usage=null;history=[];historySelection=null;backedUp.clear();
   aiProxy.setUser(null);
   sync.disconnect();storage.clearContext();clearPersonal();initialUI.resetStorage();render();refreshStatus();if(panelOpen)renderPanel();
   try{
@@ -223,7 +226,7 @@ export function setupWorkspaceUI({model,initialUI,storage,$,esc,render,notify,cl
  }
  function renderPanel(){
   const cloud=mode==='cloud',enabled=cloud&&canEdit();
-  body.innerHTML=`<div class="workspace-intro"><b>${user?esc(user.username||user.email||user.id):mode==='anonymous'?'匿名浏览器存档':'个人账号'}</b><p>五人独立空间 · 每个账号独立保存配置、模板和运行数据。</p><p id="workspace-save-status" role="status">${esc(statusText())}</p></div>${mode==='login'?`<section class="workspace-section workspace-login"><h3>登录个人空间</h3><form id="workspace-login" autocomplete="on"><fieldset><div class="form-grid"><label>用户名<input name="username" autocomplete="username" required minlength="3" maxlength="32" pattern="[A-Za-z](?:[A-Za-z0-9._]|-){2,31}" title="字母开头，3–32位字母、数字、点、下划线或连字符" autofocus><small class="muted">字母开头，3–32位字母、数字、点、下划线或连字符</small></label><label>密码<input name="password" type="password" autocomplete="current-password" required></label></div><div class="workspace-actions"><button type="submit" class="primary">登录</button></div></fieldset></form><p class="muted">登录后读取该账号的个人空间；原匿名存档仅在手动选择导入后上传。</p></section><p id="workspace-error" class="form-error" role="alert"></p>`:''}${!cloud&&mode!=='login'?`<p class="origin-note">${mode==='anonymous'?'当前站点未连接个人空间；匿名存档仅保留在此浏览器。登录后需手动导入。':esc(errorText||'正在检查登录状态。')}</p><div class="workspace-actions"><button data-workspace="verify">重新检查账号</button></div>`:''}<div id="workspace-documents"></div>${mode!=='login'?`<section class="workspace-section"><h3>个人AI配置与长期备注</h3><p class="muted">以下只保存非秘密配置，服务商和模型名称是个人偏好；实际调用以服务端配置为准。请勿填写API密钥或密码。</p><form id="workspace-profile"><fieldset ${enabled?'':'disabled'}><div class="form-grid"><label>显示名称<input name="displayName" maxlength="80" value="${esc(profile.displayName)}"></label><label>模型服务商<input name="provider" maxlength="120" placeholder="待指定" value="${esc(profile.ai.provider||'')}"></label><label>模型名称<input name="model" maxlength="120" placeholder="待指定" value="${esc(profile.ai.model||'')}"></label><label>排序偏好<select name="sortMode"><option value="auto" ${profile.preferences.sortMode==='auto'?'selected':''}>自动排序</option><option value="reverse_repo_first" ${profile.preferences.sortMode==='reverse_repo_first'?'selected':''}>融券下单优先</option><option value="liquidity_last" ${profile.preferences.sortMode==='liquidity_last'?'selected':''}>平头寸优先</option></select></label><label class="wide">长期备注<textarea name="notes" maxlength="4000" placeholder="偏好与背景；不改变硬约束">${esc(profile.preferences.notes)}</textarea></label></div><div class="workspace-actions"><button type="submit" class="primary">保存个人配置</button></div></fieldset></form></section>`:''}${cloud?`<section class="workspace-section"><h3>存档与恢复</h3><p>普通编辑自动保存。刷新恢复保留输入、偏好与运行记录；请刷新快照、重新计算并审核后继续下达。历史仅展示本账号版本。</p><div class="workspace-actions"><button data-workspace="flush" ${enabled?'':'disabled'}>立即同步</button><button data-workspace="backup">导出个人空间副本</button><button data-workspace="anonymous-import" ${enabled?'':'disabled'}>选择导入原匿名本地存档</button><button data-workspace="history">查看云端运行历史</button><button data-workspace="usage">查看空间用量</button></div><div id="workspace-history"></div><div id="workspace-usage"></div></section><section class="workspace-section"><h3>退出与账号切换</h3><p>退出会清除页面个人内容和界面缓存。本机待同步副本仍按原账号隔离，可在该账号重新登录后选择恢复。</p><div class="workspace-actions"><button data-workspace="verify-backup">导出并重新验证账号</button><button data-workspace="logout" class="negative">导出个人副本并退出／切换账号</button></div></section>`:''}${mode==='login'?'':'<p id="workspace-error" class="form-error" role="alert"></p>'}`;
+  body.innerHTML=`<div class="workspace-intro"><b>${user?esc(user.username||user.email||user.id):mode==='anonymous'?'匿名浏览器存档':'个人账号'}</b><p>五人独立空间 · 每个账号独立保存配置、模板和运行数据。</p><p id="workspace-save-status" role="status">${esc(statusText())}</p></div>${mode==='login'?`<section class="workspace-section workspace-login"><h3>登录个人空间</h3><form id="workspace-login" autocomplete="on"><fieldset><div class="form-grid"><label>用户名<input name="username" autocomplete="username" required minlength="3" maxlength="32" pattern="[A-Za-z](?:[A-Za-z0-9._]|-){2,31}" title="字母开头，3–32位字母、数字、点、下划线或连字符" autofocus><small class="muted">字母开头，3–32位字母、数字、点、下划线或连字符</small></label><label>密码<input name="password" type="password" autocomplete="current-password" required></label></div><div class="workspace-actions"><button type="submit" class="primary">登录</button></div></fieldset></form><p class="muted">登录后读取该账号的个人空间；原匿名存档仅在手动选择导入后上传。</p></section><p id="workspace-error" class="form-error" role="alert"></p>`:''}${!cloud&&mode!=='login'?`<p class="origin-note">${mode==='anonymous'?'当前站点未连接个人空间；匿名存档仅保留在此浏览器。登录后需手动导入。':esc(errorText||'正在检查登录状态。')}</p><div class="workspace-actions"><button data-workspace="verify">重新检查账号</button></div>`:''}<div id="workspace-documents"></div>${mode!=='login'?`<section class="workspace-section"><h3>个人AI配置与长期备注</h3><p class="muted">以下只保存非秘密配置，服务商和模型名称是个人偏好；实际调用以服务端配置为准。请勿填写API密钥或密码。</p><form id="workspace-profile"><fieldset ${enabled?'':'disabled'}><div class="form-grid"><label>显示名称<input name="displayName" maxlength="80" value="${escRaw(profile.displayName)}"></label><label>模型服务商<input name="provider" maxlength="120" placeholder="待指定" value="${escRaw(profile.ai.provider||'')}"></label><label>模型名称<input name="model" maxlength="120" placeholder="待指定" value="${escRaw(profile.ai.model||'')}"></label><label>排序偏好<select name="sortMode"><option value="auto" ${profile.preferences.sortMode==='auto'?'selected':''}>自动排序</option><option value="reverse_repo_first" ${profile.preferences.sortMode==='reverse_repo_first'?'selected':''}>融券下单优先</option><option value="liquidity_last" ${profile.preferences.sortMode==='liquidity_last'?'selected':''}>平头寸优先</option></select></label><label class="wide">长期备注<textarea name="notes" maxlength="4000" placeholder="偏好与背景；不改变硬约束">${escRaw(profile.preferences.notes)}</textarea></label></div><div class="workspace-actions"><button type="submit" class="primary">保存个人配置</button></div></fieldset></form></section>`:''}${cloud?`<section class="workspace-section"><h3>存档与恢复</h3><p>普通编辑自动保存。刷新恢复保留输入、偏好与运行记录；请刷新快照、重新计算并审核后继续下达。历史仅展示本账号版本。</p><div class="workspace-actions"><button data-workspace="flush" ${enabled?'':'disabled'}>立即同步</button><button data-workspace="backup">导出个人空间副本</button><button data-workspace="anonymous-import" ${enabled?'':'disabled'}>选择导入原匿名本地存档</button><button data-workspace="history">查看云端运行历史</button><button data-workspace="usage">查看空间用量</button></div><div id="workspace-history"></div><div id="workspace-usage"></div></section><section class="workspace-section"><h3>退出与账号切换</h3><p>退出会清除页面个人内容和界面缓存。本机待同步副本仍按原账号隔离，可在该账号重新登录后选择恢复。</p><div class="workspace-actions"><button data-workspace="verify-backup">导出并重新验证账号</button><button data-workspace="logout" class="negative">导出个人副本并退出／切换账号</button></div></section>`:''}${mode==='login'?'':'<p id="workspace-error" class="form-error" role="alert"></p>'}`;
   renderDocuments();
   if(cloud){$('workspace-profile').closest('section').insertAdjacentHTML('afterend','<section class="workspace-section" id="workspace-ai"></section>');renderAiProbe();}
   if(mode==='login')$('workspace-login').onsubmit=e=>{e.preventDefault();void login(e.target);};
@@ -246,14 +249,40 @@ export function setupWorkspaceUI({model,initialUI,storage,$,esc,render,notify,cl
  function show(){panelOpen=true;renderPanel();if(!dialog.open)dialog.showModal();}
  $('workspace-open').onclick=show;$('workspace-lock-open').onclick=show;$('workspace-close').onclick=()=>dialog.close();
  dialog.addEventListener('close',()=>{const password=body.querySelector('#workspace-login [name="password"]');if(password)password.value='';panelOpen=false;});
- async function resolve(kind,id,choice){const epoch=generation;if(backedUp.get(`${kind}/${id}`)!==fingerprint(entry(kind,id)))throw new Error('副本已有变化，请先重新导出双方副本。');const row=await sync.resolve(kind,id,choice);if(epoch!==generation)return;backedUp.delete(`${kind}/${id}`);if(row&&!['conflict','recovery','error','offline'].includes(row.status)){apply(kind,row.value);if(!initialized)await initializeLoaded(epoch);else{render();refreshStatus();}renderPanel();}}
+ async function resolve(kind,id,choice){
+  if(resolutionToken)throw new Error('正在恢复副本，请等待完成。');
+  const epoch=generation,owner=user?.id,key=`${kind}/${id}`;
+  if(backedUp.get(key)!==fingerprint(entry(kind,id)))throw new Error('副本已有变化，请先重新导出双方副本。');
+  const token={};resolutionToken=token;refreshStatus();
+  let failure=null;
+  try{
+   // The model must accept the selected value before sync advances its CAS
+   // revision or removes recovery copies. This callback must stay synchronous.
+   const row=await sync.resolve(kind,id,choice,{apply:value=>{
+    if(epoch!==generation||owner!==user?.id)throw new Error('账号已变化，未恢复副本。');
+    apply(kind,value);
+   }});
+   if(epoch!==generation)return;
+   if(row&&['ready','empty','pending'].includes(row.status)){
+    backedUp.delete(key);
+    if(!initialized)await initializeLoaded(epoch);else render();
+   }else if(row){
+    failure=row.error==='REMOTE_CHANGED_AGAIN'?'云端副本又有变化，请重新导出双方副本并选择。':
+     '所选副本未能恢复，编辑仍暂停；双方副本已保留，请核对后重试。';
+   }
+  }finally{
+   if(resolutionToken===token)resolutionToken=null;
+   if(epoch===generation){refreshStatus();if(panelOpen)renderPanel();}
+  }
+  if(failure)throw new Error(failure);
+ }
  async function showHistory(){
   const epoch=generation;
   const [result,releases]=await Promise.all([api('/api/documents/run/current/history'),api('/api/workspace/backups')]);
   if(epoch!==generation)return;
   history=result.history||[];
   if(!Array.isArray(history)||!Array.isArray(releases.backups))throw new Error('历史响应格式异常。');
-  $('workspace-history').innerHTML=releases.backups.map(row=>`<div class="workspace-history-row"><span>更新至 ${esc(row.release)} 前的自动备份 · ${esc(row.createdAt)}</span><button data-workspace-backup="${esc(row.release)}">查看及恢复</button></div>`).join('')+
+  $('workspace-history').innerHTML=releases.backups.map(row=>`<div class="workspace-history-row"><span>更新至 ${esc(row.release)} 前的自动备份 · ${esc(row.createdAt)}</span><button data-workspace-backup="${escRaw(row.release)}">查看及恢复</button></div>`).join('')+
    (history.map(row=>`<div class="workspace-history-row"><span>第 ${row.revision} 版 · ${esc(row.updatedAt||row.createdAt||'时间未提供')}${row.deleted?' · 删除记录':''}</span><button data-workspace-history="${row.revision}">查看及恢复</button></div>`).join('')||'<p>暂无常规历史版本。</p>');
  }
  async function inspectHistory(revision,release=null){

@@ -281,6 +281,24 @@ test('dialogue failure classification survives metadata GET and same-ID POST wit
   } finally { ctx.sqlite.close(); }
 });
 
+test('recovered answer diagnostics and request IDs survive same-ID replay without regenerating', async () => {
+  let calls=0;
+  const diagnostic={reason:'reference_missing',recovery:'trusted_summary',recovered:true};
+  const ctx=setup({dialogueInvoke:async()=>{calls++;return {...reply,dialogue:{...reply.dialogue,
+    diagnostic:{...diagnostic,private:'SECRET raw provider text'}}};}});
+  try {
+    await ctx.put();
+    const input=request('recovered-answer-01');
+    const first=await ctx.call('u1','/api/ai/dialogue','POST',input);
+    const replay=await ctx.call('u1','/api/ai/dialogue','POST',input);
+    assert.equal(first.body.requestId,input.requestId);
+    assert.deepEqual(first.body.dialogue.diagnostic,diagnostic);
+    assert.deepEqual(replay.body,first.body);
+    assert.equal(calls,1);
+    assert.doesNotMatch(JSON.stringify(first.body),/SECRET|private/);
+  } finally {ctx.sqlite.close();}
+});
+
 test('revised or deleted run cannot publish or replay old answer', async () => {
   const gate = deferred(); const started = deferred();
   const ctx = setup({ dialogueInvoke: async () => { started.resolve(); await gate.promise; return reply; } });

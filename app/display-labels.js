@@ -1,6 +1,4 @@
 // Presentation aliases only. Stored labels, IDs and provenance remain unchanged.
-import {createSyntheticInitialTemplate, createLegacySyntheticInitialTemplate} from './initial-data.js';
-import {createDefaultInitialTemplate} from './default-scenario.js';
 import {BUSINESS_TYPES} from './business.js';
 
 // Names describe the entered target; naming never changes trading fields.
@@ -26,23 +24,22 @@ const aliases = new Map([
   ['买入模拟非银行短融1亿60天', '买入非银行短融1亿60天'],
   ['买入模拟非银行短融1亿90天', '买入非银行短融1亿90天'],
 ]);
-function collect(value) {
-  if (!value || typeof value !== 'object') return;
-  if (typeof value.label === 'string' && /^(合成|模拟)/.test(value.label))
-    aliases.set(value.label, value.label.slice(2).replace('（非单一真实发行人）', '（组合资产）'));
-  for (const child of Object.values(value)) collect(child);
-}
-collect(createSyntheticInitialTemplate());
-collect(createLegacySyntheticInitialTemplate());
-collect(createDefaultInitialTemplate());
+// Resolve old stored names at presentation time; never migrate persisted labels.
+export const displayLabel = value => typeof value === 'string'
+  ? (aliases.get(value) ?? value).replace(/模拟|演示|合成/g, '').replace(/样例/g, '方案').replace('（非单一真实发行人）', '（组合资产）')
+  : value;
 
-// Match complete built-in names, so unrelated custom names keep their wording.
-export const displayLabel = value => aliases.get(value) ?? value;
+// Free text can arrive from historical runs, tool results, errors and AI responses.
+// Keep the transaction conditions while removing obsolete presentation qualifiers.
+export const displayText = value => typeof value === 'string' ? displayLabel(value
+  .replace(/业务头寸非负[（(][^（）()]*货币基金[）)]/g, '业务头寸非负')
+  .replace(/模拟(?=一下|一遍|当前|新增|完成|全部|交易|结果|执行)/g, '测算').replace(/条件模拟/g, '条件测算').replace(/请模拟/g, '请测算').replace(/模拟方案/g, '方案测算').replace(/期末模拟/g, '期末测算'))
+  : value;
 
 // Editing another field must not silently rewrite a stored name to its alias.
 export const preserveLabel = (submitted, original) =>
   original != null && submitted === displayLabel(original) ? original : submitted;
 
 const noteAliases = new Map([["模拟计划；金额、代码、期限及行情均非真实交易数据", "按当前计划金额、期限和交收参数执行"], ["合成演示计划", "按当前计划参数执行"]]);
-export const displayTermsNote = note => noteAliases.get(note) ?? note;
+export const displayTermsNote = note => noteAliases.get(note) ?? displayText(note);
 export const preserveTermsNote = (submitted, original) => original != null && submitted === displayTermsNote(original) ? original : submitted;

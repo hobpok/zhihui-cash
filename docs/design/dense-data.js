@@ -24,13 +24,13 @@ window.ZH_DEMO = {
     {id:'DEMO-CASH-01',name:'实际现金不得透支',category:'资金',level:'硬闸门草案',stage:'每笔 / 批次下达前',expression:'可用资金 − 本次合计现金占用 ≥ 0',inputs:'可用资金、现金流、未成交占用',source:'业务不变量；设计合同待定'},
     {id:'DEMO-CASH-02',name:'融资到账才可用',category:'资金',level:'硬闸门草案',stage:'资金可用事件',expression:'额度/申请/成交 ≠ 可用资金',inputs:'融资事件、权威可用确认',source:'业务不变量；接口待定'},
     {id:'DEMO-CASH-03',name:'卖券回款不提前使用',category:'资金',level:'硬闸门草案',stage:'回款可用事件',expression:'资金确认可用后才计入 +2亿元',inputs:'成交、结算、可用确认',source:'业务不变量；事件口径待定'},
-    {id:'DEMO-EXP-01',name:'同银行存款路径限制',category:'集中度',level:'演示硬约束',stage:'新增存款交易前',expression:'若A银行敞口 / NAV > 8%，阻断新增存款',inputs:'银行、业务类型、敞口、NAV',source:'历史8%路径演示；非正式制度'},
+    {id:'DEMO-EXP-01',name:'同银行存款路径限制',category:'集中度',level:'设计硬约束',stage:'新增存款交易前',expression:'若A银行敞口 / NAV > 8%，阻断新增存款',inputs:'银行、业务类型、敞口、NAV',source:'历史8%路径演示；非正式制度'},
     {id:'DEMO-PATH-01',name:'前置事件必须兑现',category:'顺序',level:'硬闸门草案',stage:'逐步预演 / 下达前',expression:'先发送 ≠ 先成交 ≠ 资金可用',inputs:'前置事件类型、实际状态',source:'路线图1.1'},
     {id:'DEMO-BATCH-01',name:'并行指令合并占用',category:'资金',level:'硬闸门草案',stage:'本次发送批次',expression:'整批现金需求 ≤ 当前实际可用',inputs:'全部待发项、当前占用',source:'路线图1.1'},
     {id:'DEMO-LINK-01',name:'父子口径与回报去重',category:'状态',level:'状态不变量',stage:'快照 / 增量回报',expression:'同一经济金额仅计一次',inputs:'父计划、指令、成交、事件ID',source:'事件ID和覆盖范围待阶段2'},
     {id:'DEMO-OCC-01',name:'占用迁移与撤改释放',category:'状态',level:'状态不变量',stage:'成交 / 撤改确认',expression:'成交不二扣；撤改确认后才释放',inputs:'成交量、未成交量、释放确认',source:'路线图1.1'},
     {id:'DEMO-VERSION-01',name:'审核范围与最新复核',category:'审核',level:'硬闸门草案',stage:'每次手动下达前',expression:'内容/引用版本变化→重审；纯刷新不自动失效',inputs:'指令包、计划/规则/偏好版本',source:'路线图1.1'},
-    {id:'DEMO-WARN-01',name:'A银行暴露观察线',category:'集中度',level:'模拟软预警',stage:'每步预计交易后',expression:'比例 ≥ 8.2% 时提示；不自动阻断',inputs:'A银行敞口、NAV',source:'本轮新增合成8.2%观察线，非正式制度'},
+    {id:'DEMO-WARN-01',name:'A银行暴露观察线',category:'集中度',level:'观察预警',stage:'每步预计交易后',expression:'比例 ≥ 8.2% 时提示；不自动阻断',inputs:'A银行敞口、NAV',source:'本轮新增合成8.2%观察线，非正式制度'},
     {id:'DEMO-MISSING-01',name:'缺关键字段不得放行',category:'数据',level:'硬闸门草案',stage:'计算 / 下达前',expression:'null保持未知，仅阻断依赖该字段的动作',inputs:'必需字段、适用性、来源时点',source:'费用/垫0仅本例；融资额度、质押券未知'}
   ],
   paths: {

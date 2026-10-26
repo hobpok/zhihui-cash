@@ -16,15 +16,6 @@ document.querySelector('#next-step').addEventListener('click',()=>{selectStep(cu
 document.querySelector('.step-controls').hidden=false;
 function hashStep(){const match=location.hash.match(/^#step-([1-5])$/);if(match)selectStep(Number(match[1])-1);}
 selectStep(0);hashStep();window.addEventListener('hashchange',hashStep);
-const dialog=document.querySelector('#image-dialog'),large=document.querySelector('#large-image');
-let imageOpener;
-document.querySelectorAll('.zoom').forEach(button=>button.addEventListener('click',()=>{
-  const image=button.querySelector('img');imageOpener=button;large.src=image.src;large.alt=image.alt;
-  document.querySelector('#image-title').textContent=image.alt;dialog.showModal();document.querySelector('.image-scroll').scrollTo(0,0);
-}));
-document.querySelector('#close-image').addEventListener('click',()=>dialog.close());
-dialog.addEventListener('click',event=>{if(event.target===dialog){const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)dialog.close();}});
-dialog.addEventListener('close',()=>imageOpener?.focus());
 let statusTimer;
 document.querySelectorAll('[data-copy]').forEach(button=>button.addEventListener('click',async()=>{
   const source=document.getElementById(button.dataset.copy),text=source.textContent.trim(),status=document.querySelector('#copy-status');

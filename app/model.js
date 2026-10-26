@@ -1,5 +1,5 @@
 // Versioned local simulation envelope, not the full 2A RunState/source adapter.
-import { calculate, evaluateCurrentConcentration, evaluateSelectedSequence } from './engine.js';
+import { calculate, evaluateCurrentConcentration, evaluateSelectedSequence, remainingDepositOrderIssue } from './engine.js';
 import { newExecution, executionSummary, registerSend, registerCancel, registerCashEvent, applyEvent, validateExecution } from './execution.js';
 import { normalizeInitialTemplate, legacyInitialTemplate,
   deriveTemplateExposure, bankIdForPlan, validatePlanSecurity, openingAccountCash } from './initial-data.js';
@@ -245,6 +245,9 @@ function readiness(state, item, { skipReview = false } = {}) {
     if (failed) return { stepId: item.stepId, ready: false,
       reason: coreRuleDetail(failed),
       ruleId: failed.ruleId ?? null, coreRules: rules };
+    const remainingOrder = remainingDepositOrderIssue({...state,summary:summary(state)},plan,item.nominalYuan);
+    if (remainingOrder) return {stepId:item.stepId,ready:false,reason:remainingOrder.reason,
+      ruleId:remainingOrder.ruleId};
   } else {
     const concentration = evaluateCurrentConcentration({ ...state, summary: summary(state) }, plan, item.nominalYuan);
     if (concentration.needed.some(key => key === 'issuerId' || key === 'bankId' || key.startsWith('bankId:')))
@@ -552,6 +555,10 @@ export function executionFillReadiness(state,instructionId,nominalYuan) {
     const checked=evaluateCoreRules(actual,{plan,amountYuan,cashYuan});
     const failed=checked.missing[0] ?? checked.blocking[0];
     if (failed) return reject(`成交前最新规则复核：${coreRuleDetail(failed)}`,failed.ruleId);
+    // Legacy accepted purchases also need a fresh remaining-plan check. This
+    // rejects only a new fill; it never edits or reverses existing fills.
+    const remainingOrder=remainingDepositOrderIssue(actual,plan,amountYuan);
+    if (remainingOrder) return reject(`成交前剩余计划复核：${remainingOrder.reason}`,remainingOrder.ruleId);
   }
   return {ready:true,reason:'成交前依赖及最新规则复核通过',dependencies};
 }
@@ -886,7 +893,10 @@ export function deriveDispatchGroups(state, batchRows = deriveBatchReadiness(sta
 export function deriveAdvancementGroups(state) {
   const result = { priority:[], synchronous:[], restricted:[], pending:[] };
   const steps = state.proposal?.steps ?? [];
-  const pendingByPlan = new Set(steps.map(step => step.planId));
+  const representedByPlan = new Map();
+  const sentStepIds = new Set(Object.values(state.execution.instructions).map(i=>i.stepId));
+  for (const step of steps) if (!sentStepIds.has(step.stepId))
+    representedByPlan.set(step.planId,safeAdd(representedByPlan.get(step.planId) ?? 0,step.nominalYuan));
   const unresolved = state.progressId !== 'initial' || Object.keys(state.execution.pending).length > 0;
   const stale = state.execution.requiresRefresh || state.execution.snapshot.quality !== 'fresh' ||
     Date.now() - state.execution.snapshot.observedAt > 30000 || state.execution.requiresReapproval;
@@ -924,7 +934,9 @@ export function deriveAdvancementGroups(state) {
         reason:'历史场景或回报缺口须先核实' });
       continue;
     }
-    const relief = Number.isSafeInteger(trace?.beforeExposureYuan) &&
+    const metricTrends = (trace?.rules ?? []).filter(rule => Number.isInteger(rule.improvementTrend));
+    const relief = metricTrends.length ? metricTrends.some(rule => rule.improvementTrend > 0) &&
+      metricTrends.every(rule => rule.improvementTrend >= 0) : Number.isSafeInteger(trace?.beforeExposureYuan) &&
       Number.isSafeInteger(trace?.afterExposureYuan) &&
       trace.afterExposureYuan < trace.beforeExposureYuan ||
       Number.isSafeInteger(trace?.beforeCashYuan) && Number.isSafeInteger(trace?.afterCashYuan) &&
@@ -937,19 +949,35 @@ export function deriveAdvancementGroups(state) {
     result[priority ? 'priority' : 'synchronous'].push({ ...details,
       status:stale ? 'awaiting_refresh' : manualApproval(state) ?
         (priority?'priority':'synchronous') : 'awaiting_review',
-      reason:relief?'该步缓解现金或银行敞口':preferencePriority?'符合经理设置的逆回购优先偏好':
+      reason:relief?'该步改善指标且其他指标不恶化':preferencePriority?'符合经理设置的逆回购优先偏好':
         managerOrder?'已计算排单首位':'与前序可共同下达' });
     readyIndex++;
   }
+  const balances = new Map(summary(state).planBalances.map(row => [row.planId,row]));
+  const coverage = new Map((state.proposal?.planCoverage ?? []).map(row => [row.planId,row]));
+  const exclusions = new Map((state.calculation?.trace?.search?.excludedActions ?? []).map(row => [row.planId,row]));
   for (const plan of state.plans) {
-    if (pendingByPlan.has(plan.planId)) continue;
-    const balance = summary(state).planBalances.find(row => row.planId === plan.planId);
+    const balance = balances.get(plan.planId);
     if (!balance || balance.arrangeableYuan <= 0) continue;
+    // A partially suggested plan still has an unscheduled remainder. Blocked
+    // steps already have their own card above and must not be counted twice.
+    const remainder = Math.max(0,balance.arrangeableYuan-(representedByPlan.get(plan.planId) ?? 0));
+    if (!remainder) continue;
     const cancelling = Object.values(state.execution.instructions).some(instruction =>
       instruction.planId === plan.planId && instruction.status === 'cancel_pending');
-    result.pending.push({planId:plan.planId,label:plan.label,nominalYuan:balance.arrangeableYuan,
-      status:cancelling?'cancel_pending':'awaiting_calculation',
-      reason:cancelling?'撤改单确认中':'尚未进入本次计算顺序'});
+    const item = {planId:plan.planId,label:plan.label,nominalYuan:remainder};
+    const considered = state.proposal?.origin === 'calculated' && state.proposal.pathId !== 'CUSTOM-ORDER' &&
+      (coverage.has(plan.planId) || exclusions.has(plan.planId));
+    if (cancelling) result.pending.push({...item,status:'cancel_pending',reason:'撤改单确认中'});
+    else if (considered) {
+      const exclusion = exclusions.get(plan.planId);
+      const blocker = state.proposal?.blockers?.find(row => row.planId === plan.planId);
+      const explanation = exclusion?.reason ?? blocker?.message ??
+        '本次搜索未形成该余量的安排；未证明不可执行，需结合计算记录核对';
+      result.restricted.push({...item,status:'calculated_unarranged',
+        reason:`本次未安排余量${yi(remainder)}：${explanation}${stale?'；当前结果待核对刷新':''}`});
+    } else result.pending.push({...item,status:'awaiting_calculation',
+      reason:state.proposal?.pathId === 'CUSTOM-ORDER' ? '未纳入本次自定义批次，需计算全部剩余计划' : '请计算当前剩余计划'});
   }
   return result;
 }
@@ -976,11 +1004,16 @@ export function createModel(saved) {
       coreRules: evaluateCoreRules({ ...state, summary: summary(state) }),
       stepReadiness: readinessRows, batchReadiness: batchRows, dispatchGroups: groups };
   };
-  const commit = next => {
+  // Batch operations still validate and commit every individual fact. Their
+  // intermediate full views are unused; derive the public view at return time.
+  const commitState = next => {
     next.revision = safeAdd(state.revision, 1);
     const checked = validateSaved(next);
     if (!checked.ok) throw new Error(checked.errors.join('；'));
     state = next;
+  };
+  const commit = next => {
+    commitState(next);
     return view();
   };
   const initialOnly = () => { if (state.progressId !== 'initial' || state.execution.journal.length)
@@ -1012,7 +1045,7 @@ export function createModel(saved) {
     const next = clone(state);
     const sent = registerSend(next.execution, selected, plan, state.approval.approvalId, state.marketClock);
     next.execution = sent.execution;
-    commit(next);
+    commitState(next);
     return sent.instructionId;
   };
   const customItems = items => {
@@ -1453,7 +1486,7 @@ export function createModel(saved) {
           const next = clone(state);
           next.execution = applyEvent(next.execution, event).execution;
           next.execution.nextLocalEvent++;
-          commit(next);
+          commitState(next);
           const reason = outcome === 'accepted' ? '本地投管流程记录为已接收，尚未成交' : '本地投管流程记录为拒绝且无占用；本批剩余步骤未发送';
           results.push({ stepId, instructionId, status: outcome, reason });
           if (outcome === 'rejected') { stoppedReason = reason; break; }
@@ -1482,7 +1515,7 @@ export function createModel(saved) {
       if (skipReview) {
         const next = clone(state);
         customAuthority(next, true);
-        commit(next);
+        commitState(next);
       }
       const exceptionAt = receiptMode === 'accepted' ? -1 : Math.min(stopAtIndex ?? 1, selected.length - 1);
       const results = [];
@@ -1504,7 +1537,7 @@ export function createModel(saved) {
           const sent = registerSend(next.execution, step, plan, state.approval.approvalId,
             state.marketClock, skipReview ? 'calculated_skip_review' : null);
           next.execution = sent.execution;
-          commit(next);
+          commitState(next);
           instructionId = sent.instructionId;
         } catch (error) {
           stoppedReason = error.message;
@@ -1524,7 +1557,7 @@ export function createModel(saved) {
           const next = clone(state);
           next.execution = applyEvent(next.execution, event).execution;
           next.execution.nextLocalEvent++;
-          commit(next);
+          commitState(next);
           const reason = outcome === 'accepted' ? '本地投管流程记录为已接收，尚未成交' : '本地投管流程记录为拒绝且无占用；本批剩余步骤未发送';
           results.push({ ...item, instructionId, status: outcome, reason });
           if (outcome === 'rejected') { stoppedReason = reason; break; }
@@ -1574,7 +1607,7 @@ export function createModel(saved) {
             const amountYuan = instruction.nominalYuan-instruction.filledYuan-instruction.cancelledYuan;
             if (amountYuan <= 0) throw new Error('没有未成交份额');
             localEvent('fill',{nominalYuan:amountYuan});
-            commit(next);
+            commitState(next);
             results.push({instructionId,status:'filled',amountYuan,reason:'已记录成交；资金收付仍待结算'});
           } else {
             if (instruction.settlementDate !== null && instruction.settlementDate > next.context.businessDate)
@@ -1588,7 +1621,7 @@ export function createModel(saved) {
               throw new Error('该指令已完成结算和资金划拨，没有待处理金额');
             if (unsettledYuan > 0) localEvent('cash_settled',{amountYuan:unsettledYuan});
             if (uncreditedYuan > 0) localEvent('cash_available',{amountYuan:uncreditedYuan});
-            commit(next);
+            commitState(next);
             results.push({instructionId,status:'settled',amountYuan:Math.max(unsettledYuan,uncreditedYuan),
               reason:instruction.direction==='inflow'?'已确认结算及到账，实际账户增加':'已确认结算付款，实际账户扣减'});
           }
@@ -1658,9 +1691,26 @@ export function createModel(saved) {
       const checked = validateSaved(data);
       if (!checked.ok) throw new Error(checked.errors.join('；'));
       const incoming = normalizeSaved(data);
-      if (incoming.context.runId === state.context.runId && state.execution.journal.length &&
-        (incoming.revision < state.revision || !same(incoming.execution.journal, state.execution.journal)))
-        throw new Error('旧存档不能覆盖当前运行域的较新执行事实');
+      if (incoming.context.runId === state.context.runId) {
+        const current = state.execution, restored = incoming.execution;
+        const hasFacts = current.journal.length || Object.keys(current.seen).length;
+        // Local revisions also count independent edits and snapshot refreshes;
+        // they do not order two devices. Preserve execution facts instead.
+        const eventFact = event => {
+          if (!event) return event;
+          const { receivedAt, reportClockTime, ...value } = event;
+          return value;
+        };
+        if (hasFacts && (
+          !same(restored.journal.slice(0, current.journal.length), current.journal) ||
+          Object.entries(current.seen).some(([id, event]) =>
+            !same(eventFact(restored.seen[id]), eventFact(event))) ||
+          !same(restored.openingFacts, current.openingFacts) ||
+          restored.initialCashYuan !== current.initialCashYuan ||
+          restored.demoMode !== current.demoMode ||
+          ['nextInstruction', 'nextCancel', 'nextLocalEvent'].some(key => restored[key] < current[key])))
+          throw new Error('存档不能回退或改写当前运行域的执行事实');
+      }
       incoming.execution.requiresRefresh = true;
       incoming.execution.requiresReapproval = true;
       state = incoming; return view();

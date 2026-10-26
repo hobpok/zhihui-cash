@@ -93,7 +93,7 @@ test('a term repair also carries an unchanged breach in an unrelated bank',()=>{
   assert.equal(row(s,'C03',{},'BANK-B').result,'block');
   const bank=result.rows.find(x=>x.ruleId==='C03'&&x.subjectId==='BANK-B');
   assert.equal(bank.result,'warn');
-  assert.match(bank.reason,/其他已超限指标改善/);
+  assert.match(bank.reason,/其他适用指标改善/);
   assert.equal(result.rows.find(x=>x.ruleId==='C09').result,'warn');
 });
 

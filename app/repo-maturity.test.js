@@ -38,7 +38,8 @@ test('linked maturity enters business C09 at opening; financing candidate can co
   const p=financing(t),before=JSON.stringify(e);
   assert.equal(rule(s,'C01',{plan:p,amountYuan:20*Y}).projectedValue,0);
   assert.equal(rule(s,'C01',{plan:p,amountYuan:20*Y}).result,'pass');
-  assert.equal(rule(s,'C01',{plan:p,amountYuan:20*Y-1}).result,'block');
+  assert.equal(rule(s,'C01',{plan:p,amountYuan:20*Y-1}).result,'warn');
+  assert.equal(rule(s,'C01',{plan:p,amountYuan:20*Y-1}).projectedValue,-1);
   assert.equal(rule(s,'C09',{plan:p,amountYuan:80*Y}).denominatorYuan,580*Y);
   assert.equal(JSON.stringify(e),before);
   assert.equal(s.summary.accountCashYuan,5*Y);

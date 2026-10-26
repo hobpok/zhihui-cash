@@ -18,11 +18,11 @@ const SAFE_ERRORS = Object.freeze({
   AI_PROVIDER_ERROR: 'AI服务暂时未能完成请求，请稍后重试。',
   AI_PROVIDER_INVALID: 'AI服务返回内容异常，请稍后重试。',
   AI_UNAVAILABLE: 'AI服务暂时不可用，请稍后重试。',
-  AI_DIALOGUE_INVALID: 'AI答复未通过依据校验，请补充需求或稍后重试。',
+  AI_DIALOGUE_INVALID: 'AI答复未通过依据校验，请重试；无需重新检测连接。',
   AI_OUTPUT_INVALID: 'AI答复格式无效，请稍后重试。',
   AI_TOOL_FAILED: '测算工具未能完成，请保存当前运行后重试。',
   AI_TOOL_INVALID: 'AI提供的测算参数无效，请明确需求后重试。',
-  AI_FAILED: '本次分析未完成，请重试或补充需求，无需重新检测连接。',
+  AI_FAILED: '本次分析未完成，请重试，无需重新检测连接。',
   AI_EXPIRED: '上次请求已结束等待，可以重新发送需求。',
   AI_HISTORY_UNAVAILABLE: '此前对话已过期，请开启新会话并描述完整需求。',
   AI_HISTORY_STALE: '对话依据已变化，请基于当前运行重新描述需求。',
@@ -30,6 +30,25 @@ const SAFE_ERRORS = Object.freeze({
 });
 const safeError = code => Object.hasOwn(SAFE_ERRORS, code)
   ? SAFE_ERRORS[code] : '本次AI请求未完成，请检查状态后再试。';
+
+const DIAGNOSTIC_REASONS = new Set(['json_parse','decision_shape','required_tool','required_answer',
+  'answer_shape','reference_unknown','reference_duplicate','reference_stale','required_reference',
+  'no_useful_evidence','clarification_shape','unsupported_shape','decision_kind','reference_missing',
+  'narrative_amount','narrative_percentage','narrative_entity','narrative_cash']);
+function safeDiagnostic(value) {
+  if (!value || !DIAGNOSTIC_REASONS.has(value.reason) || typeof value.recovered !== 'boolean' ||
+      !(value.recovered ? ['trusted_summary','rewritten_answer'] : ['retry','refresh_run','clarify']).includes(value.recovery)) return null;
+  return {reason:value.reason, recovery:value.recovery, recovered:value.recovered};
+}
+const diagnosticError = diagnostic => {
+  if (!diagnostic) return null;
+  if (diagnostic.reason === 'reference_stale') return 'AI引用了已被更新的测算结果，答复已拦截。请保存当前运行后重新测算。';
+  if (['reference_missing','required_reference','reference_unknown','reference_duplicate'].includes(diagnostic.reason))
+    return 'AI答复的引用缺失或无法核实，答复已拦截。请重试，无需补充原需求或重新检测连接。';
+  if (['required_tool','no_useful_evidence'].includes(diagnostic.reason))
+    return 'AI未取得本轮必需的有效测算依据，答复已拦截。请重新测算，无需补充原需求。';
+  return 'AI答复结构或内容未通过依据校验，答复已拦截。请重试，无需重新检测连接。';
+};
 
 // This is a bounded transport parser, not a source of final answer authority.
 // Only a complete, request-bound terminal frame can reach the normal validator.
@@ -74,7 +93,7 @@ async function readDialogueStream(response, requestId, signal, onProgress) {
       // A server 5xx can happen after generation has already been persisted.
       // Preserve the original ID and confirm its status before any new request.
       throw Object.assign(new Error('Request failed'), { code: value.error, status: value.httpStatus,
-        terminal: value.httpStatus < 500 });
+        diagnostic: safeDiagnostic(value.diagnostic), terminal: value.httpStatus < 500 });
     } else {
       if (![200, 202].includes(value.httpStatus) || value.value?.requestId !== requestId) invalid();
       return { value: value.value };
@@ -219,7 +238,8 @@ export function createAiConversation({ fetchImpl = (...args) => fetch(...args), 
       return readDialogueStream(response, body.requestId, signal, onProgress);
     let value;
     try { value = await response.json(); } catch { throw new Error('INVALID_RESPONSE'); }
-    if (!response.ok) throw Object.assign(new Error('Request failed'), { code: value?.error, status: response.status });
+    if (!response.ok) throw Object.assign(new Error('Request failed'), { code: value?.error,
+      diagnostic: safeDiagnostic(value?.diagnostic), status: response.status });
     return value;
     })()]); } finally { signal?.removeEventListener('abort', abort); }
   }
@@ -322,12 +342,18 @@ export function createAiConversation({ fetchImpl = (...args) => fetch(...args), 
       if (result?.requestId !== entry.id || result.simulated !== false) throw new Error('INVALID_RESPONSE');
       if (result.status !== 'completed') throw Object.assign(new Error('Not completed'), {
         code: result.errorCode || 'AI_FAILED', uncertain: result.status === 'processing', terminal: result.status !== 'processing',
+        diagnostic: safeDiagnostic(result.diagnostic),
       });
       const dialogue = result.dialogue;
       if (!dialogue || typeof dialogue.status !== 'string' || typeof dialogue.answer !== 'string'
         || !Array.isArray(dialogue.references) || !Array.isArray(dialogue.evidence)
         || JSON.stringify(dialogue).length > 131072) throw new Error('INVALID_RESPONSE');
-      state = { phase: 'completed', result: clone(dialogue), error: '', requestId: entry.id,
+      const diagnostic = safeDiagnostic(dialogue.diagnostic);
+      const safeDialogue = clone(dialogue);
+      if (diagnostic) safeDialogue.diagnostic = diagnostic;
+      else delete safeDialogue.diagnostic;
+      state = { phase: 'completed', result: safeDialogue, error: '', requestId: entry.id,
+        diagnostic,
         startedAt: entry.savedAt, completedAt: now() }; userTurns = nextTurns;
       previousRequestId = entry.id;
       transcript = [...transcript, {userMessage:safeDisplay(message.trim()),
@@ -339,7 +365,9 @@ export function createAiConversation({ fetchImpl = (...args) => fetch(...args), 
         onAuthError(error); userTurns = [];
       } else if (!error.terminal && (error.uncertain || error.status >= 500 || !error.status)) recovery = entry;
       state = { phase: 'error', result: null, error: error.name === 'AbortError'
-        ? '连接等待超时；服务端可能仍在处理，请检查请求状态。' : safeError(error.code),
+        ? '连接等待超时；服务端可能仍在处理，请检查请求状态。' : diagnosticError(error.diagnostic) || safeError(error.code),
+        requestId: entry.id, diagnostic: safeDiagnostic(error.diagnostic),
+        diagnosticReason: safeDiagnostic(error.diagnostic)?.reason ?? null,
         startedAt: entry.savedAt, completedAt: recovery ? null : now() };
     } finally {
       clearTimeout(timer);

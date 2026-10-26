@@ -2,7 +2,9 @@
   'use strict';
   const data = await window.ZHDesignAdapter.loadViewModel();
   const $ = id => document.getElementById(id);
-  const escape = value => String(value ?? '待确认').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+  // Preserve provenance in the view model and JSON export; format labels only when rendering.
+  const displayText = value => String(value ?? '待确认').replaceAll('沿用演示', '沿用参数').replaceAll('新增合成', '预置条件').replaceAll('单条演示', '本项规则').replaceAll('模拟', '测算').replaceAll('演示', '示例').replaceAll('合成', '预置');
+  const escape = value => displayText(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
   const amount = value => value === null ? '待确认' : (value / 100000000).toFixed(2);
   const signed = value => `${value > 0 ? '+' : ''}${amount(value)}`;
   const tag = (tone, text) => `<span class="tag ${escape(tone)}">${escape(text)}</span>`;
@@ -54,7 +56,7 @@
         rows.push({step:String(step.n),trade:step.trade,rule:'DEMO-EXP-01',input:'业务=存单买入；限制动作=新增存款',formula:'动作不适用，不把存款禁令扩大到所有买入',before:step.before,after:step.after,result:'na',label:'本条不适用',reason:'其他适用限制仍需独立校验，不能据此声称全部合规'});
         if(currentPath!=='B') {
           rows.push({step:String(step.n),trade:step.trade,rule:'DEMO-PATH-01',input:'DEP-001成交确认是前置事件',formula:'先发送存款不等于已成交',before:'当前尚无成交',after:'候选假定已确认',result:'wait',label:'前置事件待确认',reason:'仅在事件实际确认后方可沿此候选推进'});
-          rows.push({step:String(step.n),trade:step.trade,rule:'DEMO-WARN-01',input:'预计A银行敞口41.5亿 / NAV500亿',formula:'8.3% ≥ 8.2%（合成观察线）',before:step.before,after:step.after,result:'warn',label:'模拟软预警',reason:'提示经理审核接受；不自动阻断存单，也不能覆盖硬限制'});
+          rows.push({step:String(step.n),trade:step.trade,rule:'DEMO-WARN-01',input:'预计A银行敞口41.5亿 / NAV500亿',formula:'8.3% ≥ 8.2%（观察线）',before:step.before,after:step.after,result:'warn',label:'观察预警',reason:'提示经理审核接受；不自动阻断存单，也不能覆盖硬限制'});
         }
       }
       if(step.trade==='RR-001') rows.push({step:String(step.n),trade:step.trade,rule:'DEMO-CASH-02',input:`此步需补${amount(step.gapYuan)}亿；融资可用确认尚无`,formula:'所需融资 ≠ 已可用融资',before:'当前未确认融资',after:`需补${amount(step.gapYuan)}亿条件`,result:'wait',label:'等待资金',reason:'融资额度/质押券待补；本页不自动新增融资或下达'});
@@ -76,7 +78,7 @@
     $('peak-metric').innerHTML=path.peakGapYuan===null?'<span style="font-size:18px">未完整测算</span>':`${amount(path.peakGapYuan)}<small>亿</small>`;
     $('peak-note').textContent=path.peakGapYuan===null?'路径阻断；不是需求为0':'未计新增融资的投影';
     $('path-summary').innerHTML=`<b>${escape(path.label)}</b>${tag(path.tone,path.conclusion)}`;
-    $('path-explanation').textContent=path.explanation;
+    $('path-explanation').textContent=displayText(path.explanation);
     let cumulativeGap=0;
     $('path-rows').innerHTML=path.steps.map(step=>{
       cumulativeGap=Math.max(cumulativeGap,step.gapYuan);
@@ -86,12 +88,12 @@
     $('path-panel').setAttribute('aria-labelledby',`path-${currentPath}`);
     renderGroups();records=buildPresetLogs(path);renderRecords();
     const highlights=[records.find(row=>row.result==='missing'),records.find(row=>row.rule==='DEMO-EXP-01'&&row.trade==='DEP-001'),records.find(row=>row.rule==='DEMO-CASH-02')].filter(Boolean);
-    $('rule-summary-mini').innerHTML=`<div class="mini-heading"><b>规则检查摘要 · 候选${currentPath}</b><a href="#rule-records">全部${records.length}条 ↓</a></div>${highlights.map(row=>`<button data-record="${escape(row.id)}"><b>${escape(row.rule)}</b>${tag(row.result,row.label)}<small>${escape(row.formula)}</small></button>`).join('')}<div class="mini-foot">11项模拟规则 · 人工预期，非引擎日志</div>`;
+    $('rule-summary-mini').innerHTML=`<div class="mini-heading"><b>规则检查摘要 · 候选${currentPath}</b><a href="#rule-records">全部${records.length}条 ↓</a></div>${highlights.map(row=>`<button data-record="${escape(row.id)}"><b>${escape(row.rule)}</b>${tag(row.result,row.label)}<small>${escape(row.formula)}</small></button>`).join('')}<div class="mini-foot">11项设计规则 · 人工预期，非引擎日志</div>`;
   }
   function renderExecution() {
     $('execution-rows').innerHTML=data.trades.map(trade=>{
       const occupied=trade.id==='RR-001'?data.execution.occupiedYuan:0;
-      return `<tr><td><b>${escape(trade.id)}</b><small>${trade.id==='RR-001'?'RR-I01（合成）':'未生成指令'}</small></td><td>${escape(trade.type)}</td><td class="num">${amount(trade.amountYuan)}</td><td class="num">0.00</td><td class="num">${amount(occupied)}</td><td class="num">${amount(trade.amountYuan-occupied)}</td><td>${trade.id==='RR-001'?tag('wait','已接收未成交'):trade.id==='SELL-001'?tag('wait','未成交 / 回款未可用'):tag('neutral','未下达')}</td><td><button data-trade="${escape(trade.id)}">关联计划与规则</button></td></tr>`;
+      return `<tr><td><b>${escape(trade.id)}</b><small>${trade.id==='RR-001'?'RR-I01（预置）':'未生成指令'}</small></td><td>${escape(trade.type)}</td><td class="num">${amount(trade.amountYuan)}</td><td class="num">0.00</td><td class="num">${amount(occupied)}</td><td class="num">${amount(trade.amountYuan-occupied)}</td><td>${trade.id==='RR-001'?tag('wait','已接收未成交'):trade.id==='SELL-001'?tag('wait','未成交 / 回款未可用'):tag('neutral','未下达')}</td><td><button data-trade="${escape(trade.id)}">关联计划与规则</button></td></tr>`;
     }).join('');
     $('event-rows').innerHTML=data.execution.events.map(event=>`<tr><td>${escape(event.time)}<small>${escape(event.id)}</small></td><td>${escape(event.trade)}</td><td>${escape(event.event)}</td><td>${escape(event.cash)}</td><td>${escape(event.state)}</td><td>${escape(event.note)}</td></tr>`).join('');
   }
@@ -102,9 +104,9 @@
   }
   const lines=entries=>entries.map(([key,value])=>`<div class="detail-line"><b>${escape(key)}</b><span>${escape(value)}</span></div>`).join('');
   function openNamed(name) {
-    if(name==='rules') openDialog('规则全案 · 11项模拟设计规则',`<p class="origin-note">这些是演示规则与业务不变量草案，不是正式制度。规则目录与规则记录分别建模，后续可替换数据来源。</p><div class="table-scroll"><table><thead><tr><th>ID / 名称</th><th>输入 / 检查时点</th><th>表达式 / 性质</th><th>来源</th></tr></thead><tbody>${data.rules.map(rule=>`<tr><td>${escape(rule.id)}<small>${escape(rule.name)}</small></td><td>${escape(rule.inputs)}<small>${escape(rule.stage)}</small></td><td>${escape(rule.expression)}<small>${escape(rule.level)}</small></td><td>${escape(rule.source)}</td></tr>`).join('')}</tbody></table></div>`);
-    if(name==='preferences') openDialog('经理偏好与冲突处理',`<p>硬约束先筛选；偏好不能覆盖资金与适用硬限制。以下为已确认的默认排序。</p>${lines(data.preferences.map(pref=>[`${pref.rank}. ${pref.name}`,pref.kind]))}<p style="margin-top:12px">候选A：先存款保护路径，卖券先回款降低峰值；逆回购后置是此候选的演示选择，不是永久品种顺序。候选C：若卖券款晚到，峰值升到10亿。未知交易时间窗不假装已满足。</p><p>实现阶段允许编辑优先级；保存新版本后，相关未发送指令重新计算并按范围重审。当前设计稿不保存偏好变更。</p>`);
-    if(name==='assumptions') openDialog('场景假设与来源',`<ol>${data.assumptions.map(item=>`<li>${escape(item)}</li>`).join('')}</ol><p>本页增加的8.2%软观察线仅为说明预警展示而设；正式规则、公式、交易参数和时点需后续确认。截图旧有的“全部禁止”等结论不会继承。</p>`);
+    if(name==='rules') openDialog('规则全案 · 11项设计规则',`<p class="origin-note">这些是规则草案与业务不变量草案，不是正式制度。规则目录与规则记录分别建模，后续可替换数据来源。</p><div class="table-scroll"><table><thead><tr><th>ID / 名称</th><th>输入 / 检查时点</th><th>表达式 / 性质</th><th>来源</th></tr></thead><tbody>${data.rules.map(rule=>`<tr><td>${escape(rule.id)}<small>${escape(rule.name)}</small></td><td>${escape(rule.inputs)}<small>${escape(rule.stage)}</small></td><td>${escape(rule.expression)}<small>${escape(rule.level)}</small></td><td>${escape(rule.source)}</td></tr>`).join('')}</tbody></table></div>`);
+    if(name==='preferences') openDialog('经理偏好与冲突处理',`<p>硬约束先筛选；偏好不能覆盖资金与适用硬限制。以下为已确认的默认排序。</p>${lines(data.preferences.map(pref=>[`${pref.rank}. ${pref.name}`,pref.kind]))}<p style="margin-top:12px">候选A：先存款保护路径，卖券先回款降低峰值；逆回购后置是此候选的示例选择，不是永久品种顺序。候选C：若卖券款晚到，峰值升到10亿。未知交易时间窗不假装已满足。</p><p>实现阶段允许编辑优先级；保存新版本后，相关未发送指令重新计算并按范围重审。当前设计稿不保存偏好变更。</p>`);
+    if(name==='assumptions') openDialog('场景假设与来源',`<ol>${data.assumptions.map(item=>`<li>${escape(item)}</li>`).join('')}</ol><p>本页增加的8.2%软观察线仅为说明预警展示而设；正式规则、公式、交易参数和时点需后续确认。历史“全部禁止”等结论不会继承。</p>`);
     if(name==='plan') openDialog('计划输入字段 · 文字设计',`<p>日初资金不足不阻止保存完整计划；编辑后的目标须覆盖已有成交和在途事实。此窗口是字段规范，不提交业务。</p><div class="table-scroll"><table><thead><tr><th>字段</th><th>示例</th><th>约束</th></tr></thead><tbody><tr><td>业务类型 / 方向 / 对象</td><td>存款 / 存入 / A银行</td><td>用对象ID关联规则，不仅按名称</td></tr><tr><td>计划名义金额</td><td>1.00亿元</td><td>底层人民币元整数；保留金额单位</td></tr><tr><td>预计结算现金</td><td>−1.00亿元（本例同额）</td><td>与名义金额分开，后续由交易模型计算</td></tr><tr><td>交易 / 交收日期</td><td>2026-09-07</td><td>本轮均当日收付，不等于已经到账</td></tr><tr><td>利率 / 价格 / 到期 / 时窗</td><td>待用户或接口补充</td><td>未知保持null；相关正式校验不能放行</td></tr><tr><td>纳入日初与否</td><td>否（用户明确）</td><td>防止现金流重复计入</td></tr></tbody></table></div><p>新增/编辑计划的完整表单将在合同明确后的原型阶段实现。</p>`);
     if(name==='approval') openDialog('审核指令包 · 完整字段设计',`${lines([['范围','场景、组合、交易日、父计划ID与版本'],['每笔指令','指令ID、对象、方向、金额、顺序、必要交易参数'],['条件','前置成交/资金可用事件；已接受预警与冲突'],['版本','规则、偏好、输入快照与建议版本'],['审核效果','只建立许可，不发送、不占用资金'],['后续下达','每次手动点击，最新校验；变更清单重新呈示，内容变更重审']])}<p style="margin-top:12px">本例未建立审核包，也未确认新增融资，不能把候选路径当作可发送批次。同次审核可覆盖明确后续条件项，但条件始终不足时保留未完成目标。</p>`);
     if(name==='adapter') openDialog('场景与接口替换入口',`<p class="origin-note">设计期view model，版本 ${escape(data.schemaVersion)}。当前由本地fixture加载，未建立完整阶段2A接口合同。</p>${lines([['数据入口','dense-data.js → ZHDesignAdapter.loadViewModel()'],['页面消费','context / trades / rules / paths / logsCommon / execution'],['金额单位','人民币元整数；页面换算为亿元'],['结果来源','preset_design：人工预期；不得冒充live_engine'],['后续替换','已分离展示数据入口；阶段2按合同补齐字段映射，模板文案同步更新'],['当前不具备','正式规则求值、自动搜索、审核写入、指令下达、持久化']])}<p style="margin-top:10px">预置路径切换只更换展示结果，不更新当前资金或成交事实。</p><button id="download-model">下载当前视图数据JSON</button><pre>${escape(JSON.stringify({schemaVersion:data.schemaVersion,mode:data.mode,scenarioId:data.scenarioId,context:data.context,initialCashYuan:data.initialCashYuan,feeYuan:data.feeYuan,bufferYuan:data.bufferYuan,financingLimitYuan:data.financingLimitYuan,trades:data.trades},null,2))}</pre>`);

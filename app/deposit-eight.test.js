@@ -180,7 +180,10 @@ test('selected engine order, model batch preview and dispatch all enforce the sa
   assert.ok(blocked.trace.at(-1).rules.some(r=>r.ruleId===gateId&&r.result==='block'));
   const bad=m.recalculateDispatchBatch(backwards);
   assert.equal(bad.recalculationReady,false);
-  assert.equal(bad.recalculationRows.at(-1).ruleId,gateId);
+  // The manager-selected engine trace still diagnoses the later deposit gate;
+  // dispatch now rejects the harmful purchase earlier, before reserving it.
+  assert.equal(bad.recalculationRows[0].ruleId,'PLAN-DEPOSIT-ORDER');
+  assert.match(bad.recalculationRows[0].reason,/剩余整笔存款/);
   const good=m.recalculateDispatchBatch([...backwards].reverse());
   assert.equal(good.recalculationReady,true);
   const items=good.proposal.steps.map(st=>({stepId:st.stepId,nominalYuan:st.nominalYuan}));

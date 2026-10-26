@@ -526,6 +526,13 @@ function evaluate(state, facts, actions, id, split = null) {
     }
     if (hard === 'missing' || warning === 'missing') missing = true;
     const core = useCore ? evaluateCoreRules(state,{plan,amountYuan:amount,projectedActions,cashYuan:before}) : null;
+    const remainingOrderIssue = id.startsWith('AUTO') ?
+      remainingDepositOrderIssue(state,plan,amount,projectedActions) : null;
+    if (core && remainingOrderIssue) {
+      const rule={ruleId:remainingOrderIssue.ruleId,name:'保留剩余整笔存款顺序',result:'block',
+        reason:remainingOrderIssue.reason,requiredDepositPlanIds:remainingOrderIssue.requiredDepositPlanIds};
+      core.rows.push(rule);core.blocking.push(rule);
+    }
     for (const row of core?.rows ?? []) if (row.result === 'warn') {
       warningKeys.add(`${row.ruleId}:${row.subjectId ?? 'PORTFOLIO'}`);
       const explanation = `${row.ruleId}：${row.reason}`;
@@ -687,6 +694,110 @@ export function evaluateSelectedSequence(state, items) {
   });
   return evaluate(state,facts,actions,'CUSTOM');
 }
+
+// A current subset must not consume the company-bank headroom required by an
+// unsent, indivisible deposit. Compare the same remaining intentions with and
+// without this purchase; existing sales may release exposure, but are never
+// credited as current cash here. Sent deposits already reserve their principal
+// in core rules and retain the separate execution-time fill dependency.
+export function remainingDepositOrderIssue(state, plan, nominalYuan, projectedActions = []) {
+  if (!singleDay(state) || !coreRulesEnabled(state) ||
+      !['cd_buy','bond_buy'].includes(plan?.businessType)) return null;
+  const bankId = bankIdForPlan(plan,state.initialData);
+  if (!bankId) return null;
+  const rows = balances(state);
+  const selected = planId => projectedActions.filter(a => a.plan.planId === planId)
+    .reduce((n,a) => add(n,a.amountYuan),0);
+  const deposits = state.plans.filter(p => p.businessType === 'deposit' &&
+    bankIdForPlan(p,state.initialData) === bankId).map(p => ({plan:p,
+      amountYuan:Math.max(0,sub(rows.find(b => b.planId === p.planId)?.arrangeableYuan ?? 0,selected(p.planId)))}))
+    .filter(a => a.amountYuan > 0);
+  if (!deposits.length) return null;
+  // A merely projected sale is never a confirmed exposure release. First
+  // protect each deposit that can be done without that sale; separately retain
+  // future routes backed by known sellable holdings. This also avoids an
+  // impossible aggregate of two deposits hiding two individually valid ones.
+  const currentPrefix=projectedActions.filter(a=>!isSecuritySale(a.plan.businessType));
+  const sales=verifiedRemainingSales(state,rows,bankId);
+  const gate = actions => evaluateCoreRules(state,{projectedActions:actions}).rows
+    .find(row => row.ruleId === 'C05-DEPOSIT' && row.subjectId === bankId);
+  for (const futureSales of [[],...(sales.length?[sales]:[])]) {
+    for (const protectedDeposits of [...deposits.map(a=>[a]),...(deposits.length>1?[deposits]:[])]) {
+      // Verified sales are the most favorable remaining exposure release, so
+      // apply them before replaying selected deposits. Otherwise an earlier
+      // deposit's historical gate could fail merely because its unlocking sale
+      // was removed from currentPrefix, masking the next deposit's valid gate.
+      const before=gate([...futureSales,...currentPrefix,...protectedDeposits]);
+      if (before?.result!=='pass') continue;
+      const after=gate([...futureSales,...currentPrefix,{plan,amountYuan:nominalYuan},...protectedDeposits]);
+      if (!['block','missing'].includes(after?.result)) continue;
+      const requiredDepositPlanIds=protectedDeposits.map(a=>a.plan.planId);
+      return {ruleId:'PLAN-DEPOSIT-ORDER',planId:requiredDepositPlanIds[0],bankId,
+        requiredDepositPlanIds,blockingRule:after,
+        reason:`须保留剩余整笔存款（${protectedDeposits.map(a=>a.plan.label).join('、')}）的银行额度；`+
+          `先安排${plan.label} ${nominalYuan}元将使后续存款受限：${after.reason}。须先安排存款并按成交前置条件复核。`};
+    }
+  }
+  return null;
+}
+
+function verifiedRemainingSales(state, rows, bankId) {
+  const t=state.initialData,available=new Map(), result=[];
+  const instructions=Object.values(state.execution?.instructions??{});
+  const matured=new Set(t.maturityCashEvents.filter(e=>e.dueDate<=state.context.businessDate&&e.sourceHoldingId)
+    .map(e=>e.sourceHoldingId));
+  for (const p of state.plans) {
+    if (!isSecuritySale(p.businessType)||bankIdForPlan(p,t)!==bankId) continue;
+    const security=t.securities.find(s=>s.securityId===p.securityId);
+    if (!security || p.issuerId!==security.issuerBankId ||
+        !(p.businessType==='cd_sell'?security.instrumentKind==='cd':
+          ['bond','government_bond','abs'].includes(security.instrumentKind))) continue;
+    if (!available.has(p.securityId)) {
+      const holdings=t.holdings.filter(h=>h.securityId===p.securityId&&!matured.has(h.holdingId));
+      let known=holdings.every(h=>Number.isSafeInteger(h.sellableYuan));
+      let amount=known?holdings.reduce((n,h)=>add(n,h.sellableYuan),0):0;
+      for (const opening of t.pendingSettlements.filter(x=>x.securityId===p.securityId&&!x.holdingIncludedAtOpen)) {
+        if (opening.direction==='inflow') amount=sub(amount,opening.amountYuan);
+        else if (opening.settlementDate<=state.context.businessDate) {
+          const paid=opening.cashIncludedAtOpen?opening.amountYuan:
+            Object.values(state.execution?.cashEventReceipts??{}).filter(r=>r.sourceId===opening.tradeId)
+              .reduce((n,r)=>add(n,r.amountYuan),0);
+          amount=add(amount,paid);
+        }
+      }
+      for (const i of instructions.filter(i=>i.securityId===p.securityId&&i.status!=='rejected')) {
+        if (['cd_buy','bond_buy'].includes(i.businessType)) amount=add(amount,i.settledYuan);
+        else if (isSecuritySale(i.businessType)) amount=sub(amount,i.filledYuan);
+      }
+      available.set(p.securityId,known?Math.max(0,amount):0);
+    }
+    const amount=rows.find(b=>b.planId===p.planId)?.remainingYuan??0;
+    if (amount<=0 || amount>available.get(p.securityId)) continue;
+    result.push({plan:p,amountYuan:amount});
+    available.set(p.securityId,sub(available.get(p.securityId),amount));
+  }
+  return result;
+}
+
+// Stable dependency ordering for the bounded subset fallback. This is not an
+// exhaustive subset optimizer: preserve manager preferences wherever no
+// deposit-headroom dependency requires moving a predecessor first.
+function remainingPlanOrder(state, actions, keys) {
+  const ordered = searchOrder(actions,keys), result = [], visiting = new Set();
+  const visit = action => {
+    if (result.includes(action) || visiting.has(action)) return;
+    visiting.add(action);
+    const issue = remainingDepositOrderIssue(state,action.plan,action.amount);
+    for (const planId of issue?.requiredDepositPlanIds ?? []) {
+      const prerequisite = ordered.find(a => a.plan.planId === planId);
+      if (prerequisite) visit(prerequisite);
+    }
+    visiting.delete(action);
+    result.push(action);
+  };
+  for (const action of ordered) visit(action);
+  return result;
+}
 // For a same-day purchase from a compliant prefix, each C01-C09 threshold and
 // the bank-specific C05-DEPOSIT transaction gate is
 // an affine inequality in the added nominal amount (C09 has a positive affine
@@ -711,6 +822,8 @@ function largestCurrentOutflowSlice(state, facts, prefix, action, budget) {
   const valid = amount => {
     if (budget.used >= MAX_PARTIAL_EVALUATIONS) return false;
     budget.used++;
+    if (remainingDepositOrderIssue(state,action.plan,amount,
+      prefix.map(a => ({plan:a.plan,amountYuan:a.amount})))) return false;
     const candidate = evaluate(state,facts,[...prefix,{...action,amount}],'AUTO-SUBSET-SLICE');
     return candidate.fullCoverage && ['feasible','waiting_conditions'].includes(candidate.status) &&
       candidate.projectedFinalCashYuan !== null &&
@@ -972,19 +1085,24 @@ export function calculate(state, options = {}) {
     } else throw new Error('未知路径标识');
   }
   if (!boundary && (actions.length > 7 || coreRulesEnabled(state)) && (pathId === 'AUTO' || pathId === 'auto') &&
-    // Keep the established one-plan reverse-repo 0-SPLIT approval flow.
+    // Keep the established approval flow when the cash-sized first slice is
+    // valid, even if the later slice is blocked. A first slice blocked by C02
+    // (or another rule) must still search smaller amounts.
     !(actions.length === 1 && actions[0].plan.businessType === 'reverse_repo' &&
-      results.some(c => c.candidateId === '0-SPLIT')) &&
+      results.some(c => c.candidateId === '0-SPLIT' && c.steps[0]?.blocked === false &&
+        c.trace[0]?.rules.every(r => !['block','missing','closed'].includes(r.result)))) &&
     !results.some(c => c.fullCoverage && ['feasible','waiting_conditions'].includes(c.status) &&
       (!facts.singleDay || (c.projectedFinalCashYuan !== null && facts.input.bufferYuan !== null &&
         c.projectedFinalCashYuan >= facts.input.bufferYuan)))) {
-    const ordered = searchOrder(actions,facts.orderedKeys);
+    const ordered = remainingPlanOrder(state,actions,facts.orderedKeys);
     const chosen = [], excluded = [], partialBudget = {used:0};
     let subsetChecks = 0;
     for (const action of ordered) {
+      const orderIssue = remainingDepositOrderIssue(state,action.plan,action.amount,
+        chosen.map(a => ({plan:a.plan,amountYuan:a.amount})));
       const trial = evaluate(state,facts,[...chosen,action],'AUTO-SUBSET');
       subsetChecks++;
-      if (trial.status === 'blocked_sequence' || trial.status === 'insufficient_data' ||
+      if (orderIssue || trial.status === 'blocked_sequence' || trial.status === 'insufficient_data' ||
           (facts.singleDay && trial.projectedFinalCashYuan !== null && facts.input.bufferYuan !== null &&
            trial.projectedFinalCashYuan < facts.input.bufferYuan)) {
         const slice = largestCurrentOutflowSlice(state,facts,chosen,action,partialBudget);
@@ -993,11 +1111,13 @@ export function calculate(state, options = {}) {
           excluded.push({planId:action.plan.planId,status:'partially_arranged',
             arrangedYuan:slice.amount,unarrangedYuan:sub(action.amount,slice.amount),
             reason:'当前指标和头寸允许的最大单位金额分片；余量保留原计划'});
-        } else excluded.push({planId:action.plan.planId,status:trial.status,
-          reason:trial.conflicts.at(-1) ?? trial.status});
+        } else excluded.push({planId:action.plan.planId,status:orderIssue ? 'blocked_sequence' : trial.status,
+          ...(orderIssue ? {ruleId:orderIssue.ruleId,requiredDepositPlanIds:orderIssue.requiredDepositPlanIds} : {}),
+          reason:orderIssue?.reason ?? trial.conflicts.at(-1) ?? trial.status});
       } else chosen.push(action);
     }
     search.subsetChecks = subsetChecks;
+    search.subsetStrategy = 'remaining_deposit_guarded_greedy';
     search.partialChecks = partialBudget.used;
     search.excludedActions = excluded;
     if (chosen.length && (chosen.length < actions.length ||

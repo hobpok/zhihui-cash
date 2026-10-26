@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createModel} from './model.js';
+import {createDefaultInitialTemplate} from './default-scenario.js';
+import {evaluateCoreRules} from './core-rules.js';
+import {evaluateSelectedSequence} from './engine.js';
 import {baseTemplate,createScenarios,plan,YI} from '../scripts/robustness-scenarios.mjs';
 
 const scenario = id => structuredClone(createScenarios().find(x => x.id === id).template);
@@ -9,6 +12,64 @@ const cover = (state,label) => state.proposal.planCoverage.find(row =>
   state.plans.find(p => p.planId === row.planId)?.label === label);
 const step = (state,label) => state.proposal.steps.find(row =>
   state.plans.find(p => p.planId === row.planId)?.label === label);
+
+test('a cash-only reverse repo split cannot hide a smaller C02-compliant slice', () => {
+  const t=baseTemplate({id:'PART-REPO-C02',cash:3,gov:3});
+  t.draftPlans=[plan('逆回购7亿','reverse_repo',7)];
+  const model=start(t),state=model.generateProposal();
+  assert.equal(state.proposal.status,'feasible');
+  assert.equal(state.proposal.steps.length,1);
+  assert.equal(state.proposal.steps[0].nominalYuan,YI);
+  assert.equal(state.proposal.unarrangedYuan,6*YI);
+  assert.ok(state.calculation.trace.search.partialChecks>0);
+  model.approveProposal();
+  const id=model.send(state.proposal.steps[0].stepId).sentInstructionId;
+  model.simulateEvent('accepted',{instructionId:id});
+  model.simulateEvent('fill',{instructionId:id,nominalYuan:YI});
+  const remaining=model.generateProposal();
+  assert.equal(remaining.proposal.planCoverage[0].suggestedYuan,0);
+  assert.equal(remaining.summary.planBalances[0].remainingYuan,6*YI);
+});
+
+test('default six-plan partial financing leaves a dispatchable ten-yi reverse repo and retains the rest', () => {
+  const model=start(createDefaultInitialTemplate({businessDate:'2026-10-24'}));
+  model.generateProposal();model.approveProposal();
+  for (const sent of model.sendBatch().results) {
+    const instruction=model.getState().execution.instructions[sent.instructionId];
+    model.simulateEvent('fill',{instructionId:sent.instructionId,
+      nominalYuan:(instruction.businessType==='interbank_repo_financing'?39:2)*YI});
+  }
+  const prepared=model.generateProposal();model.approveProposal();
+  for (const kind of ['deposit','cd_buy']) for (const p of prepared.plans.filter(p=>p.businessType===kind)) {
+    const id=model.send(prepared.proposal.steps.find(s=>s.planId===p.planId).stepId).sentInstructionId;
+    model.simulateEvent('accepted',{instructionId:id});
+    model.simulateEvent('fill',{instructionId:id,nominalYuan:p.targetYuan});
+  }
+  const before=model.getState(),facts=structuredClone(before.execution);
+  assert.equal(before.summary.availableYuan,15*YI);
+  assert.equal(before.summary.accountCashYuan,5*YI);
+  const state=model.generateProposal(),repo=state.plans.find(p=>p.businessType==='reverse_repo');
+  const financing=state.plans.find(p=>p.businessType==='interbank_repo_financing');
+  assert.deepEqual(state.execution,facts);
+  assert.equal(state.summary.planBalances.find(p=>p.planId===financing.planId).lockedYuan,10*YI);
+  assert.equal(state.proposal.status,'feasible');
+  assert.deepEqual(state.proposal.steps.map(s=>[s.planId,s.nominalYuan]),[[repo.planId,10*YI]]);
+  assert.equal(cover(state,repo.label).unarrangedYuan,10*YI);
+  assert.equal(evaluateSelectedSequence(state,[{planId:repo.planId,nominalYuan:10*YI+1000000}]).status,'blocked_sequence');
+  model.approveProposal();
+  const id=model.send(state.proposal.steps[0].stepId).sentInstructionId;
+  model.simulateEvent('accepted',{instructionId:id});
+  // Recalculation must not allocate the dispatched amount a second time.
+  assert.ok(model.generateProposal().proposal.steps.every(s=>s.blocked));
+  model.simulateEvent('fill',{instructionId:id,nominalYuan:10*YI});
+  const remaining=model.generateProposal();
+  assert.equal(remaining.summary.availableYuan,5*YI);
+  assert.equal(remaining.summary.accountCashYuan,5*YI);
+  const c02=evaluateCoreRules(remaining).rows.find(r=>r.ruleId==='C02'&&r.subjectId==='PORTFOLIO');
+  assert.equal(c02.currentValue,0.05);
+  assert.ok(remaining.proposal.steps.every(s=>s.blocked));
+  assert.equal(remaining.summary.planBalances.find(p=>p.planId===repo.planId).remainingYuan,10*YI);
+});
 
 test('R06 suggests exactly one yi slice and preserves six yi after fill', () => {
   const model=start(scenario('R06'));

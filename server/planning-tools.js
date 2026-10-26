@@ -3,8 +3,10 @@
 import { createModel, validateSaved } from '../app/model.js';
 import { BUSINESS_TYPES, unitFor } from '../app/business.js';
 import { buildCoreContext } from '../app/core-rules.js';
-import { deriveTemplateExposure, bankDepositLimitBps } from '../app/initial-data.js';
+import { deriveTemplateExposure, bankDepositLimitBps, SINGLE_DAY_DEMO_MODE } from '../app/initial-data.js';
 import { diagnoseExecution } from '../app/execution-diagnostics.js';
+import { assessNextTradeFunding } from './next-trade-funding.js';
+import { findRemediation } from '../app/remediation.js';
 import { readPlanningSnapshot, validateIntent, solveFundingAndReverseRepo, simulateDraft,
   PLANNING_VERSION, KNOWLEDGE_VERSION } from '../app/planning.js';
 
@@ -102,6 +104,108 @@ const safeSum = values => {
   return sum <= BigInt(Number.MAX_SAFE_INTEGER) && sum >= BigInt(Number.MIN_SAFE_INTEGER)
     ? Number(sum) : null;
 };
+
+// This is a current C02 repair amount, never the financing needed to complete
+// all targets. Read the uncapped snapshot and its evaluated integer contract;
+// fills already included in C02 must not be credited a second time.
+export function calculateCurrentCashRequirement(state) {
+  const result = {
+    status: 'insufficient_data', scope: 'current_state_only',
+    currentNumeratorYuan: null, navYuan: null,
+    thresholdNumerator: null, thresholdDenominator: null,
+    requiredNumeratorYuan: null, additionalFinancingFillYuan: null,
+    currentC02Ratio: null, projectedC02Ratio: null,
+    financingTargetYuan: null, financingFilledYuan: null, financingUnfilledYuan: null,
+    needed: [], reason: '',
+    constraints: [
+      '仅计算当前C02达到现行阈值尚需新增成交的融资；保留全部现有目标，不模拟其余交易完成。',
+      '当前分子已含真实成交的融资及卖券（含待到账）；未成交融资或卖券不计，到账不重复增加比例分子。',
+      '融资未成交余量是现有目标减已成交金额，并非当前C02必须继续成交的金额。',
+      '本结果不是新增融资或下达授权；当前C02达标不代表全部其他交易可下达，下一笔须另行复核。',
+      '缺口是精确到元的比例数学增量，不等于可下达金额；业务成交单位及现有指令可成交余量另行校验。',
+      '仅适用单日成交即改善比例的模式；实际付款现金、融资可执行额度及其他指标另行核验。',
+    ],
+  };
+  if (state?.initialData?.demoMode !== SINGLE_DAY_DEMO_MODE ||
+      state?.execution?.demoMode !== SINGLE_DAY_DEMO_MODE || state?.coreRules?.enabled === false) {
+    return { ...result, status: 'unsupported', reason: '当前模式不支持按融资成交金额直接改善C02。' };
+  }
+  if (state?.coreRules?.enabled !== true) return {
+    ...result, needed: ['coreRules'], reason: '缺少当前C02规则计算结果。' };
+  const c02 = asArray(state.coreRules.rows).find(row =>
+    row.ruleId === 'C02' && row.subjectId === 'PORTFOLIO');
+  result.currentNumeratorYuan = signedMoney(c02?.numeratorYuan);
+  result.navYuan = safeMoney(c02?.denominatorYuan);
+  result.thresholdNumerator = safeMoney(c02?.threshold?.numerator);
+  result.thresholdDenominator = safeMoney(c02?.threshold?.denominator);
+  const needed = result.needed;
+  if (!c02 || !['pass', 'block', 'warn'].includes(c02.result) || asArray(c02.needed).length)
+    needed.push('coreRules.C02');
+  if (result.currentNumeratorYuan === null) needed.push('coreRules.C02.numeratorYuan');
+  if (result.navYuan === null || result.navYuan <= 0 ||
+      result.navYuan !== state.inputs?.navYuan ||
+      result.navYuan !== state.initialData?.portfolio?.navYuan) needed.push('navYuan');
+  if (result.thresholdNumerator === null || result.thresholdDenominator === null ||
+      result.thresholdDenominator <= 0) needed.push('coreRules.C02.threshold');
+  else if (c02?.threshold?.operator !== '≥') return {
+    ...result, status: 'unsupported', reason: '当前C02不是已支持的最低比例合同。' };
+  if (!object(state.execution.instructions) || !object(state.execution.pending)) needed.push('execution');
+  const instructions = Object.values(state.execution.instructions ?? {});
+  const unresolvedCancel = instruction => {
+    if (instruction.cancelRequestId == null) return false;
+    const request = state.execution.cancels?.[instruction.cancelRequestId];
+    if (!request || request.instructionId !== instruction.instructionId) return true;
+    if (request.failed === true) return false;
+    if (!object(request.slices) || safeMoney(request.requestedYuan) === null) return true;
+    const slices = Object.values(request.slices);
+    // Completed double-confirmed slices retain cancelRequestId in the ledger.
+    // The reference alone is historical; any unapplied or uncovered amount is
+    // still unresolved and cannot support a definite current repair amount.
+    return slices.some(slice => slice.applied !== true) ||
+      safeSum(slices.map(slice => safeMoney(slice.nominalYuan))) !== request.requestedYuan;
+  };
+  if (Object.keys(state.execution.pending ?? {}).length || instructions.some(item =>
+    ['unknown', 'cancel_pending'].includes(item.status) || unresolvedCancel(item)))
+    needed.push('execution.unknownOrPendingReport');
+  if (!Array.isArray(state.plans) || !Array.isArray(state.summary?.planBalances)) needed.push('plans');
+  const financingPlans = asArray(state.plans).filter(plan =>
+    ['interbank_repo_financing', 'exchange_repo_financing'].includes(plan.businessType));
+  const filledAmounts = [];
+  for (const plan of financingPlans) {
+    const filled = safeSum(instructions.filter(item => item.planId === plan.planId)
+      .map(item => safeMoney(item.filledYuan)));
+    const balance = asArray(state.summary?.planBalances).find(item => item.planId === plan.planId);
+    if (safeMoney(plan.targetYuan) === null || filled === null || filled > plan.targetYuan ||
+        balance?.filledYuan !== filled) needed.push(`plans.${plan.planId}.financingAmount`);
+    if (plan.direction !== 'inflow' || plan.settlementDate !== state.context?.businessDate)
+      needed.push(`plans.${plan.planId}.sameDayFinancing`);
+    filledAmounts.push(filled);
+  }
+  result.financingTargetYuan = safeSum(financingPlans.map(plan => safeMoney(plan.targetYuan)));
+  result.financingFilledYuan = safeSum(filledAmounts);
+  result.financingUnfilledYuan = result.financingTargetYuan === null || result.financingFilledYuan === null
+    ? null : safeSum([result.financingTargetYuan, -result.financingFilledYuan]);
+  if ([result.financingTargetYuan, result.financingFilledYuan, result.financingUnfilledYuan]
+    .some(value => value === null || value < 0)) needed.push('financingArithmetic');
+  if (needed.length) return { ...result, reason: '缺少有效当前比例、融资事实或存在未决回报，不能给出确定融资缺口。' };
+  const nav = BigInt(result.navYuan), current = BigInt(result.currentNumeratorYuan);
+  const rate = BigInt(result.thresholdNumerator), base = BigInt(result.thresholdDenominator);
+  const required = (nav * rate + base - 1n) / base;
+  const gap = required > current ? required - current : 0n;
+  const projected = current + gap;
+  if ([required, gap, projected].some(value => value > BigInt(Number.MAX_SAFE_INTEGER) ||
+      value < BigInt(Number.MIN_SAFE_INTEGER))) return {
+    ...result, needed: ['cashRequirementArithmetic'], reason: '比例缺口超出安全整数元范围。' };
+  result.status = 'ok';
+  result.requiredNumeratorYuan = Number(required);
+  result.additionalFinancingFillYuan = Number(gap);
+  result.currentC02Ratio = result.currentNumeratorYuan / result.navYuan;
+  result.projectedC02Ratio = Number(projected) / result.navYuan;
+  result.reason = gap === 0n ? '当前C02已达标，当前比例无需再成交融资。' : '仅补足当前C02比例缺口。';
+  if (gap > BigInt(result.financingUnfilledYuan)) result.constraints.push(
+    '当前缺口超过现有融资目标的未成交余额；本工具未增加目标，也未核验新增融资可执行性。');
+  return result;
+}
 
 // Account cash uses actual credited/paid facts as its starting point. Every
 // target contributes only the part that has not yet reached that account.
@@ -380,7 +484,9 @@ const integer = { type: 'integer', minimum: 0, maximum: Number.MAX_SAFE_INTEGER 
 const tenor = { type: 'integer', minimum: 1, maximum: 3660 };
 const str = { type: 'string', minLength: 1, maxLength: 128 };
 export const PLANNING_TOOL_DEFINITIONS = Object.freeze([
-  { type: 'function', function: { name: 'read_metrics', description: '读取当前只读指标、业务头寸和计划成交占用。',
+  { type:'function',function:{name:'assess_next_trade_funding',description:'只读测算所选现有交易下一笔下达前还需新增成交多少融资；区别当前C02缺口、下一笔后C02缺口和全计划余量。按实际逐笔规则、融资业务单位及副本执行路径验证；账户付款单独检查，不要求全部融资到账，不修改目标或真实记录。',
+    parameters:schema({planId:{...str,description:'当前已有目标的精确计划ID；须先按用户所指银行及业务消歧。'}},['planId'])}},
+  { type: 'function', function: { name: 'read_metrics', description: '读取当前只读指标、业务头寸、计划成交占用及只补当前C02现金比例的融资成交缺口。',
     parameters: schema({}) } },
   { type: 'function', function: { name: 'simulate_completion', description: '只读检查当前指令区全部计划是否存在可逐步完成的合理顺序，并分别报告当前直接推进、条件期末指标与有界执行路径。含C05-DEPOSIT公司货基新增存款闸门，按该银行默认6%／该行批准8%参数核验；存款整笔不可拆，并提供存款与CD买卖换序及实际成交前置证据。无参数；不改原金额、期限或目标，不补记成交、不审核或下达。',
     parameters: schema({}) } },
@@ -629,12 +735,17 @@ export function createPlanningTools(saved, { requestId, documentRevision, notes 
   function execute(name, args, requestRequirements = {}) {
     let result;
     try {
-      if (!['read_metrics','simulate_completion','diagnose_execution','plan_trades','review_sorting'].includes(name)) throw new Error('未知工具');
+      if (!['read_metrics','simulate_completion','diagnose_execution','plan_trades','review_sorting','assess_next_trade_funding'].includes(name)) throw new Error('未知工具');
       if (name === 'read_metrics') {
         exact(args, [], name);
         result = { status: 'ok', businessDate: context.businessDate,
           portfolio: clone(context.portfolio), financing: clone(context.financing),
-          plans: clone(context.plans), currentRules: clone(fullCurrentRules) };
+          plans: clone(context.plans), currentRules: clone(fullCurrentRules),
+          currentCashRequirement: calculateCurrentCashRequirement(state) };
+      } else if (name === 'assess_next_trade_funding') {
+        exact(args,['planId'],name);
+        if (!id(args.planId) || !exposedPlanIds.has(args.planId)) throw new Error('下一笔须引用当前已存在的精确计划ID');
+        result=assessNextTradeFunding(saved,state,args.planId,calculateCurrentCashRequirement(state));
       } else if (name === 'simulate_completion') {
         exact(args, [], name);
         const simulated = simulateDraft(snapshot, [], {executionSearch:{nodeLimit:2048,candidateBudget:128}});
@@ -785,6 +896,9 @@ export function createPlanningTools(saved, { requestId, documentRevision, notes 
         const reverseArgs = {...args.reverseRepo};
         const inputCorrections = [];
         if (!Array.isArray(fixedTrades) || fixedTrades.length > 32) throw new Error('固定交易集合无效');
+        if (requestRequirements.disableRemediation === true &&
+            fixedTrades.some(trade => ['cd_sell', 'bond_sell'].includes(trade?.businessType)))
+          throw new Error('本轮明确禁止新增卖券；不能将卖券加入候选。已有计划与事实保留。');
         exact(financingArgs, ['planId','maxAmountYuan','tenorDays','unitYuan'], '融资');
         exact(reverseArgs, ['planId','amountYuan','tenorDays','unitYuan'], '逆回购');
         if (args.allowReduceReverseRepo !== undefined && typeof args.allowReduceReverseRepo !== 'boolean')
@@ -896,7 +1010,16 @@ export function createPlanningTools(saved, { requestId, documentRevision, notes 
         const checked = validateIntent(snapshot, intent);
         if (!checked.ok) result = { status: 'invalid_intent', errors: checked.errors.map(x => boundedText(x, 180)) };
         else {
-          const solved = solveFundingAndReverseRepo(snapshot, checked.intent);
+          let solved = solveFundingAndReverseRepo(snapshot, checked.intent);
+          let remediation = requestRequirements.disableRemediation === true ? null :
+            findRemediation(snapshot, checked.intent, { baseResult: solved });
+          if (remediation?.status === 'candidate' && remediation.intent.fixedPlans.length > 32)
+            remediation = { status: 'not_found', actions: [], reasons: [{ message:
+              '补救后新增固定交易超过本次32笔展示与确认上限，尚未生成可加入候选；原计划保留，不能据此认定无解。' }] };
+          if (remediation?.status === 'candidate') {
+            checked.intent = remediation.intent;
+            solved = remediation.result;
+          }
           result = projectResult(solved, checked.intent, termAssumptions, inputCorrections, {
             accountCashYuan: state.summary?.accountCashYuan,
             businessAvailableYuan: state.summary?.availableYuan,
@@ -917,6 +1040,18 @@ export function createPlanningTools(saved, { requestId, documentRevision, notes 
                 remainingYuan:balance.remainingYuan,arrangeableYuan:balance.arrangeableYuan}];
             }),
           }, explainAutomaticReverseRepo(snapshot, solved, checked.intent));
+          if (remediation && remediation.status !== 'not_needed') result.remediation = {
+            status: remediation.status, requiresManagerConfirmation: remediation.status === 'candidate',
+            originalTargetsPreserved: true,
+            actions: limited(remediation.actions, 16).map(action => ({
+              businessType: action.businessType, securityId: safeId(action.securityId),
+              targetYuan: safeMoney(action.targetYuan), bankId: safeId(action.bankId),
+              depositPlanIds: limited(action.depositPlanIds, 16).map(safeId),
+              reason: boundedText(action.reason, 500),
+            })),
+            reasons: limited(remediation.reasons, 12).map(reason => boundedText(reason.message ?? reason, 500)),
+            searchComplete: false,
+          };
         }
         if (result.main || result.alternative) lastPlanning = result;
       }

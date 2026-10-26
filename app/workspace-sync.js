@@ -105,7 +105,7 @@ export function createWorkspaceSync({ api, storage, onChange = () => {}, debounc
   }
   function stage(kind, id, value) {
     const e = getEntry(kind, id);
-    if (!e.loaded || ['conflict', 'recovery', 'loading'].includes(e.status)) throw new Error('RESOLVE_DOCUMENT_FIRST');
+    if (!e.loaded || e.resolving || ['conflict', 'recovery', 'loading'].includes(e.status)) throw new Error('RESOLVE_DOCUMENT_FIRST');
     if (!value || typeof value !== 'object') throw new Error('INVALID_DOCUMENT');
     if (equal(value, e.value)) return publicEntry(e);
     e.value = clone(value); e.error = null;
@@ -114,7 +114,7 @@ export function createWorkspaceSync({ api, storage, onChange = () => {}, debounc
   }
   async function save(e) {
     if (e.flight) return e.flight;
-    if (!e.loaded || !['pending', 'offline', 'error'].includes(e.status) || e.value === null) return publicEntry(e);
+    if (!e.loaded || e.resolving || !['pending', 'offline', 'error'].includes(e.status) || e.value === null) return publicEntry(e);
     const epoch = generation, owner = userId;
     if (!e.mutation) e.mutation = { mutationId: uuid(), expectedRevision: e.revision, value: clone(e.value) };
     const command = clone(e.mutation); persist(e); e.status = 'saving'; emit();
@@ -150,26 +150,45 @@ export function createWorkspaceSync({ api, storage, onChange = () => {}, debounc
     // order, but stop on errors/conflicts instead of retrying indefinitely.
     for (const e of [...documents.values()]) {
       if (e.flight) await e.flight;
-      while (documents.get(key(e.kind, e.id)) === e && ['pending', 'offline', 'error'].includes(e.status) && e.loaded && e.value !== null) {
+      while (documents.get(key(e.kind, e.id)) === e && !e.resolving && ['pending', 'offline', 'error'].includes(e.status) && e.loaded && e.value !== null) {
         await save(e); if (e.status !== 'pending') break;
       }
     }
     return snapshot();
   }
-  async function resolve(kind, id, choice) {
+  async function resolve(kind, id, choice, { apply } = {}) {
     const e = getEntry(kind, id), epoch = generation, owner = userId;
-    if (!['remote', 'local', 'recovery'].includes(choice) || e.flight) throw new Error('INVALID_RESOLUTION');
+    if (!['remote', 'local', 'recovery'].includes(choice) || e.flight || e.resolving) throw new Error('INVALID_RESOLUTION');
+    if (apply !== undefined && (typeof apply !== 'function' || apply.constructor?.name === 'AsyncFunction'))
+      throw new Error('INVALID_RESOLUTION_CALLBACK');
     const desired = clone(choice === 'recovery' ? e.recovery?.value : e.value);
+    const blockedStatus = e.status === 'recovery' ? 'recovery' : 'conflict';
+    e.resolving = true;
+    const timerKey = key(kind, id); clearTimeout(timers.get(timerKey)); timers.delete(timerKey);
     try {
       const latest = await read(e, owner); if (!live(e, epoch)) return null;
       if (choice !== 'remote' && !desired) throw new Error('NO_LOCAL_VALUE');
-      if (choice !== 'remote' && (latest?.revision ?? 0) !== (e.remote?.revision ?? e.revision)) {
+      if ((latest?.revision ?? 0) !== (e.remote?.revision ?? e.revision)) {
         // The remote side changed after the user reviewed/exported it. Show
         // the new pair and require another explicit decision, never overwrite
         // an unseen version just because a fresh CAS would now succeed.
-        e.remote = clone(latest); e.value = desired; e.status = 'conflict'; e.error = 'REMOTE_CHANGED_AGAIN';
-        persist(e); emit(); return publicEntry(e);
+        e.remote = clone(latest); e.status = 'conflict'; e.error = 'REMOTE_CHANGED_AGAIN';
+        emit(); return publicEntry(e);
       }
+      const selected = clone(choice === 'remote' ? latest?.value ?? null : desired);
+      // Apply the selected model synchronously before consuming any backups or
+      // accepting its cloud revision. Failure must leave the old CAS baseline
+      // and recovery copies blocked, so a later save cannot revive stale facts.
+      if (apply) {
+        const result = apply(selected);
+        if (result && typeof result.then === 'function') {
+          // Observe an accidentally returned promise without allowing it to
+          // complete the synchronization transaction.
+          Promise.resolve(result).catch(() => {});
+          throw new Error('INVALID_RESOLUTION_CALLBACK');
+        }
+      }
+      if (!live(e, epoch)) return null;
       // Export/review is the UI's explicit choice; do not remove other tabs'
       // pending backups. Consume only the selected recovery.
       if (e.recovery) removeBackup(e.recovery.storageKey, e);
@@ -177,9 +196,16 @@ export function createWorkspaceSync({ api, storage, onChange = () => {}, debounc
       e.revision = latest?.revision ?? 0; e.base = clone(latest?.value ?? null); e.value = clone(e.base);
       e.mutation = null; e.loaded = true; e.error = null; e.status = latest ? 'ready' : 'empty';
       removeBackup(e.storageKey, e);
+      e.resolving = false;
       if (choice !== 'remote') stage(kind, id, desired);
       emit(); return publicEntry(e);
-    } catch (error) { if (live(e, epoch)) fault(e, error); return live(e, epoch) ? publicEntry(e) : null; }
+    } catch (error) {
+      if (live(e, epoch)) {
+        if ([401, 403].includes(error.status) || error.code === 'SESSION_CHANGED') fault(e, error);
+        else { e.status = blockedStatus; e.error = error.code || error.message || 'RESOLUTION_APPLY_FAILED'; emit(); }
+      }
+      return live(e, epoch) ? publicEntry(e) : null;
+    } finally { if (live(e, epoch)) e.resolving = false; }
   }
   return { connect, open, stage, flush, resolve, disconnect, snapshot };
 }

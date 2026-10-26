@@ -120,3 +120,16 @@ export function createDefaultInitialTemplate({ businessDate = currentBusinessDat
     ],
   });
 }
+
+// This companion preset keeps the default scenario's holdings and business
+// inputs, while leaving the corrective sale for the proposal/AI to identify.
+export function createRemediationInitialTemplate({ businessDate = currentBusinessDate() } = {}) {
+  const template = createDefaultInitialTemplate({ businessDate });
+  const remediation = structuredClone(template);
+  remediation.templateId = 'SIM-REMEDIATION-COMPANY-GATES-20261026';
+  remediation.label = '500亿基金公司级三银行补救案例（未预设卖券）';
+  remediation.revision = 1;
+  remediation.provenance.note = '由默认三银行约束合成样例派生；保留可卖广州银行存单持仓，但计划中未预设卖券，供计算或AI提示补救交易。其余业务字段与默认样例一致；所有数据均为合成参数，不代表真实交易或制度全文。';
+  remediation.draftPlans = remediation.draftPlans.filter(plan => plan.businessType !== 'cd_sell');
+  return normalizeInitialTemplate(remediation);
+}

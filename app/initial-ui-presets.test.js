@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {setupInitialUI} from './initial-ui.js';
 import {createModel} from './model.js';
-import {createDefaultInitialTemplate} from './default-scenario.js';
+import {createDefaultInitialTemplate,createRemediationInitialTemplate} from './default-scenario.js';
 import {createOriginalInitialTemplate} from './original-scenario.js';
 
 const TEMPLATE_KEY='zhihui-initial-template-v1',HISTORY_KEY='zhihui-run-history-v1';
@@ -50,6 +50,29 @@ test('both built-in buttons immediately create independent runs, save templates 
  assert.equal(h.staged.length,2);assert.equal(h.changes.length,2);assert.deepEqual(h.screens,['desk','desk']);
  for(let i=0;i<2;i++)assert.deepEqual(h.changes[i].run.initialData,h.staged[i]);
  assert.deepEqual(JSON.parse(h.values.get(`${TEMPLATE_KEY}-before-single-day`)),h.staged[0]);
+});
+
+test('remediation preset omits the planned CD sale while retaining sellable GZ inventory and prior run history',t=>{
+ const h=harness(t),defaultTemplate=createDefaultInitialTemplate(),originalTemplate=createOriginalInitialTemplate();
+ const originalRun=h.model.serialize();
+ h.render();assert.match(h.$('initial-screen').innerHTML,/补救案例（未预设卖券）/);
+ h.clickPreset('remediation-sample');
+ assert.deepEqual(h.errors,[]);
+ const state=h.model.getState(),template=createRemediationInitialTemplate();
+ assert.equal(state.initialData.templateId,template.templateId);
+ assert.equal(state.initialData.revision,1);
+ assert.match(state.initialData.provenance.note,/未预设卖券/);
+ assert.equal(state.initialData.draftPlans.length,5);
+ assert.equal(state.initialData.draftPlans.some(plan=>plan.businessType==='cd_sell'),false);
+ assert.equal(state.plans.length,5);
+ assert.equal(state.plans.some(plan=>plan.businessType==='cd_sell'),false);
+ const gzCd=state.initialData.holdings.find(holding=>holding.securityId==='SIM-GZ-CD-OLD');
+ assert.ok(gzCd);assert.ok(gzCd.sellableYuan>0);
+ assert.deepEqual(createDefaultInitialTemplate(),defaultTemplate);
+ assert.deepEqual(createOriginalInitialTemplate(),originalTemplate);
+ assert.equal(JSON.parse(h.values.get(HISTORY_KEY))[0].state,originalRun);
+ assert.equal(JSON.parse(h.values.get(TEMPLATE_KEY)).templateId,template.templateId);
+ assert.equal(h.staged.length,1);assert.deepEqual(h.changes[0].run.initialData,h.staged[0]);
 });
 
 test('editing or replacing the template remains separate until manual new-run, and history restores the previous run',t=>{
