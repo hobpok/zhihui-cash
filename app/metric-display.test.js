@@ -1,6 +1,33 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {metricPresentation,completionPercent} from './metric-display.js';
+import {metricPresentation,completionPercent,governmentBondMaturityRatio} from './metric-display.js';
+import {createModel} from './model.js';
+import {createDefaultInitialTemplate,createBankOrderInitialTemplate} from './default-scenario.js';
+import {buildAnalysis} from './analysis.js';
+import {runLifecycle} from '../scripts/robustness-lifecycle.mjs';
+
+test('opening government maturity ratio is independent from C02 and intraday cash flows',()=>{
+  const model=createModel();model.startFromTemplate(createDefaultInitialTemplate());
+  const initial=model.getState(), saved=model.serialize();
+  const expected={numeratorYuan:2000000000,denominatorYuan:50000000000,value:.04};
+  assert.deepEqual(governmentBondMaturityRatio(initial),expected);
+  assert.deepEqual(buildAnalysis(initial).governmentBondMaturityRatio,expected);
+  const cash=initial.coreRules.rows.find(r=>r.ruleId==='C02');
+  assert.equal(cash.numeratorYuan,1500000000);assert.equal(cash.denominatorYuan,50000000000);
+  assert.equal(cash.currentValue,.03);assert.equal(model.serialize(),saved);
+  const lifecycle=runLifecycle(createBankOrderInitialTemplate());
+  assert.equal(lifecycle.final.completed,true);
+  const restored=createModel(lifecycle.serialized).getState();
+  assert.deepEqual(governmentBondMaturityRatio(restored),expected);
+  assert.equal(restored.coreRules.rows.find(r=>r.ruleId==='C02').currentValue,.05);
+  const custom=structuredClone(initial);custom.initialData.portfolio.navYuan=100000000000;
+  assert.equal(governmentBondMaturityRatio(custom).value,.02);
+  custom.initialData.portfolio.navYuan=null;
+  assert.equal(governmentBondMaturityRatio(custom).value,null);
+  custom.initialData.portfolio.navYuan=0;
+  assert.equal(governmentBondMaturityRatio(custom).value,null);
+  assert.equal(governmentBondMaturityRatio({}).value,null);
+});
 test('percentage warning uses one percentage point and exact unrounded boundaries',()=>{
   const r=n=>({currentValue:n/100000, numeratorYuan:n,denominatorYuan:100000,threshold:{operator:'≤',numerator:5,denominator:100},result:'pass'});
   assert.equal(metricPresentation(r(3999)).tone,'normal');

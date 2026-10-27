@@ -1,5 +1,5 @@
 import {createModel, validateSaved, deriveExecutionOrderDependencies} from './model.js';
-import {metricPresentation,completionPercent} from './metric-display.js';
+import {metricPresentation,completionPercent,governmentBondMaturityRatio} from './metric-display.js';
 import {BUSINESS_TYPES, BUSINESS_DIRECTIONS, isFinancing, isExchangeRepo} from './business.js';
 import {deriveTemplateExposure,bankDepositLimitBps} from './initial-data.js';
 import {setupInitialUI, renderCashDashboard} from './initial-ui.js';
@@ -182,6 +182,9 @@ function renderFacts(s,t,q){
  const fact=(label,value,note='',tone='normal')=>`<div><dt>${esc(label)}${note?help(label,note):''}</dt><dd class="metric-${tone}">${value}</dd></div>`;
  const cash=rows.find(r=>r.ruleId==='C02'),term=rows.find(r=>r.ruleId==='C09');
  let html=fact('净资产',`${amount(inp.navYuan)} 亿`);
+ const governmentRatio=governmentBondMaturityRatio(s);
+ html+=fact('一年内政府债到期比例',governmentRatio.value==null?'待补':`${(governmentRatio.value*100).toLocaleString('zh-CN',{maximumFractionDigits:6})}%`,
+  `初始一年内政府债 ${amount(governmentRatio.numeratorYuan)} 亿 ÷ 基金净资产 ${amount(governmentRatio.denominatorYuan)} 亿。按本运行初始持仓计算，不随当天资金流入或流出变化；仅作展示，无独立交易阈值。`);
  if(s.coreRules?.enabled){html+=fact('现金比例',`${esc(coreUI.value(cash||{},'currentValue',s))} / 5%`, '当前现金及一年内政府债占基金净资产比例，5%为下限；5%～6%为黄色，低于5%红色。成交融资及卖券按业务口径计量，到账不重复计入。',metricPresentation(cash).tone);
  html+=fact('平均剩余期限',`${esc(coreUI.value(term||{},'currentValue',s))} / 90${simple?'天':'交易日'}`,'按完整资产负债权重计算，仅此项分母加入存续正回购。显示舍入不参与是否超限的判断。',metricPresentation(term).tone);}
  html+='<div class="facts-extra"><dt>资金与输入明细</dt><dd><details data-facts-open="funds"><summary>查看现金构成与融资到账</summary><dl>';
@@ -461,7 +464,7 @@ const actions={
  preview:()=>runCalculation(),
  assumptions:()=>{const s=model.getState();openDialog('业务口径与来源',`<p>${esc(displayLabel(s.initialData?.label)||'当前场景')}：按当前运行的期初模板、计划及已登记事实计算。</p><p>业务日 ${esc(s.context.businessDate)}，实际期初账户 ${amount(s.inputs.initialCashYuan)}亿，业务日初可用 ${amount(s.summary.openingBusinessAvailableYuan)}亿；含当日到期未到账款。实时头寸另扣导入的期初缴款与交收义务。</p><p>预计日终是假设今日计划全部成交且收付完成的投影，尚未成交回款不能当作当前现金。今日T+1用款按未来交收日检查，实际付款独立核验账户现金。一级存单为已确认认购，只安排缴款；二级存单归现券。</p><p>金额按元整数，未知留空。当前场景持仓、名义与现金按同额测算；期限按当前期限字段及交收日计算。新模板使用十条已定义规则与完整期限权重；旧场景保留原规则基线。交易指令与回报按已核对的事实登记。</p>`);},
  export:()=>{const blob=new Blob([model.serialize()],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`zhihui-${model.getState().scenarioId}-ui.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);notify('当前运行记录已导出。');},
- reset:()=>{if($('dialog').open)closeDialog();openDialog('重置当前运行副本','<p>将当前账号的初始模板和运行副本统一重置为“补救案例（未预设卖券）”：5笔初始计划，不含卖券。原运行及成交记录先保留至历史，新副本清除交易进度和审核；不再沿用旧运行或自定义模板。此操作仅影响当前账号。</p><button id="confirm-reset" class="primary">确认重置为无卖券案例</button>');$('confirm-reset').onclick=()=>{try{if(workspace&&!workspace.canEdit())throw new Error('请先处理账号或同步状态，再重置运行。');initialUI.resetToDefault();activity.set(model.getState().scenarioId,[]);closeDialog();render();}catch(error){formError(error);}};}
+ reset:()=>{if($('dialog').open)closeDialog();openDialog('重置当前运行副本','<p>将当前账号的初始模板和运行副本统一重置为“AI融资案例（未预设融资及卖券）”：4笔初始用款计划，不含正回购融资及卖券；当日正回购到期付款10亿元。原运行及成交记录先保留至历史，新副本清除交易进度和审核；不再沿用旧运行或自定义模板。此操作仅影响当前账号。</p><button id="confirm-reset" class="primary">确认重置为AI融资案例</button>');$('confirm-reset').onclick=()=>{try{if(workspace&&!workspace.canEdit())throw new Error('请先处理账号或同步状态，再重置运行。');initialUI.resetToDefault();activity.set(model.getState().scenarioId,[]);closeDialog();render();}catch(error){formError(error);}};}
 };
 document.addEventListener('click',e=>{
  try{

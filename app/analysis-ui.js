@@ -114,11 +114,13 @@ export function setupAnalysisUI({model, $, esc, escRaw=esc, openDialog, closeDia
   const searched = (row, fields) => !search || fields.some(x => String(x ?? '').toLocaleLowerCase('zh-CN').includes(search));
 
   function buildCoreRows() {
+    const government = latest.governmentBondMaturityRatio;
+    const governmentSummary = `<p class="analysis-note" data-government-bond-ratio><b>一年内政府债到期比例：${safe(displayValue(government?.value,'ratio'))}</b>（${safe(displayValue(government?.numeratorYuan,'yuan'))} / ${safe(displayValue(government?.denominatorYuan,'yuan'))}）。按本运行初始持仓计算，不随当天资金流入或流出变化；仅作展示，无独立交易阈值。</p>`;
     const source = latest.coreRows || [];
     const favorites = new Set(preferences.favorites || []);
     const rows = sortRows(source, x => x.key, preferences).filter(row =>
       matchFilter(row, row.key, filter, favorites) && searched(row, [row.ruleId, row.name, row.subjectLabel, row.reason]));
-    return `<div class="analysis-table-wrap"><table class="analysis-table analysis-table--core"><thead><tr><th>常用 / 顺序</th><th>指标与主体</th><th>当前值</th><th>选定步骤交易后预计</th><th>阈值 / 当前余量</th><th>判断</th><th>来源</th></tr></thead><tbody>`+
+    return governmentSummary+`<div class="analysis-table-wrap"><table class="analysis-table analysis-table--core"><thead><tr><th>常用 / 顺序</th><th>指标与主体</th><th>当前值</th><th>选定步骤交易后预计</th><th>阈值 / 当前余量</th><th>判断</th><th>来源</th></tr></thead><tbody>`+
       rows.map((row, i) => {
         const status = statusOf(row), projected = latest.projection?.available ? row.projectedValue : null;
         const notapp = ['notapp', 'not_applicable'].includes(status);

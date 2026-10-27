@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { createModel, validateSaved } from './model.js';
 import { evaluateCoreRules } from './core-rules.js';
 import { normalizeInitialTemplate } from './initial-data.js';
-import { createDefaultInitialTemplate, createBankOrderInitialTemplate, createRemediationInitialTemplate, prepareInitialTemplateForReset } from './default-scenario.js';
+import { createDefaultInitialTemplate, createBankOrderInitialTemplate, createRemediationInitialTemplate, createAiFinancingInitialTemplate, prepareInitialTemplateForReset } from './default-scenario.js';
 import { runLifecycle } from '../scripts/robustness-lifecycle.mjs';
 
 const E=100000000, q=n=>Math.round(n*E);
@@ -16,8 +16,8 @@ const opening=t=>{const m=createModel();m.startFromTemplate(t);return m.getState
 const find=(s,kind,code)=>s.plans.find(p=>p.businessType===kind && (!code||p.issuerId===`SIM-BANK-${code}`));
 const sum=rows=>rows.reduce((n,r)=>n+r.amountYuan,0);
 
-test('fresh default is the five-plan remediation scenario and preserves the optional six-plan preset',()=>{
-  const options={businessDate:'2026-10-26'},t=createDefaultInitialTemplate(options);
+test('historical five-plan remediation scenario preserves the optional six-plan preset',()=>{
+  const options={businessDate:'2026-10-26'},t=createRemediationInitialTemplate(options);
   const old=createBankOrderInitialTemplate(options),oldSnapshot=structuredClone(old);
   assert.deepEqual(t,createRemediationInitialTemplate(options));
   assert.equal(t.templateId,'SIM-REMEDIATION-COMPANY-GATES-20261026');
@@ -30,7 +30,7 @@ test('fresh default is the five-plan remediation scenario and preserves the opti
   t.holdings[0].amountYuan=0;
   assert.deepEqual(old,oldSnapshot);assert.deepEqual(createBankOrderInitialTemplate(options),oldSnapshot);
   const m=createModel();m.startFromTemplate();
-  assert.equal(m.getState().plans.length,5);assert.equal(m.getState().plans.some(p=>p.businessType==='cd_sell'),false);
+  assert.equal(m.getState().plans.length,4);assert.equal(m.getState().plans.some(p=>p.businessType==='cd_sell'),false);
 });
 
 test('saved six-plan runs retain their original template, plans and calculated facts',()=>{
@@ -83,11 +83,11 @@ test('preset-sale company scenario preserves exact balance sheet, three banks, a
 
 test('opening includes due repo once in business measures while account remains five',()=>{
   const s=opening(createDefaultInitialTemplate());
-  assert.equal(s.summary.accountCashYuan,q(5));assert.equal(s.summary.availableYuan,-q(20));
-  assert.equal(rule(s.coreRules.rows,'C02').currentValue,0);
+  assert.equal(s.summary.accountCashYuan,q(5));assert.equal(s.summary.availableYuan,-q(5));
+  assert.equal(rule(s.coreRules.rows,'C02').currentValue,.03);
   assert.equal(rule(s.coreRules.rows,'C09').numeratorYuan,q(46200));
-  assert.equal(rule(s.coreRules.rows,'C09').denominatorYuan,q(500));
-  assert.equal(rule(s.coreRules.rows,'C09').currentValue,92.4);
+  assert.equal(rule(s.coreRules.rows,'C09').denominatorYuan,q(515));
+  assert.equal(rule(s.coreRules.rows,'C09').currentValue,46200/515);
   assert.ok(s.coreRules.rows.filter(r=>r.subjectId!=='PORTFOLIO').every(r=>['pass','not_applicable'].includes(r.result)));
   assert.ok(!s.coreRules.rows.some(r=>r.ruleId==='C04-DEPOSIT'));
   assert.deepEqual(s.coreRules.missing,[]);
@@ -178,12 +178,12 @@ test('new defaults follow UTC+8 date, while saved runs keep dates and facts',t=>
   assert.ok(fresh.maturityCashEvents.every(e=>e.dueDate===fresh.businessDate));
   const restored=createModel(saved).getState();
   assert.equal(restored.context.businessDate,'2026-10-19');
-  assert.equal(restored.initialData.templateId,'SIM-REMEDIATION-COMPANY-GATES-20261026');
+  assert.equal(restored.initialData.templateId,'SIM-AI-FINANCING-COMPANY-GATES-20261027');
   assert.ok(validateSaved(JSON.parse(saved)).ok);
 });
 
 test('legacy reset refresh stays narrowly scoped and never replaces saved templates with the new sample',()=>{
-  const t=createDefaultInitialTemplate();
+  const t=createRemediationInitialTemplate();
   assert.strictEqual(prepareInitialTemplateForReset(t),t);
   t.templateId='SIM-DEFAULT-COMPLEX-01';
   t.revision=1;
