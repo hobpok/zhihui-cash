@@ -408,6 +408,48 @@ test('deterministic recovery visibly marks sale remediation as awaiting manager 
   assert.match(output.text,/尚未应用或成交/);
 });
 
+test('financing recovery leads with evidenced new amounts and omits unchanged existing targets', async () => {
+  const result = {status:'feasible',originalReverseRepoTargetYuan:700_000_000,
+    intent:{financing:{tenorDays:1},reverseRepo:{planId:'existing-reverse',tenorDays:7}},
+    existingFixedTargets:[{securityLabel:'已有买券',targetYuan:900_000_000}],
+    main:{applicable:true,financingYuan:300_000_000,reverseRepoYuan:700_000_000,
+      deltas:[{kind:'add',businessType:'interbank_repo_financing',targetYuan:300_000_000,tenorDays:1}],
+      search:{complete:false},requiresInFlightFinancingReceipt:true},
+    remediation:{requiresManagerConfirmation:true,searchComplete:false,
+      actions:[{businessType:'bond_sell',targetYuan:200_000_000,reason:'释放存款敞口'}]}};
+  for (const message of ['请拟定新增融资方案', '请拟定融资和逆回购方案']) {
+    const ledger=[];
+    const tools={context:{},definitions:[{...definition,function:{...definition.function,name:'plan_trades'}}],
+      execute(name){ledger.push({toolName:name,result});return structuredClone(result);},
+      getEvidence:()=>structuredClone(ledger)};
+    const output=await invokeAiDialogue({message,resolved,tools,
+      fetchImpl:scriptedFetch([toolTurn(toolCall('plan','plan_trades')),finalTurn({kind:'answer'})]).fetchImpl});
+    assert.match(output.text,/新增正回购融资3亿元，期限1天/);
+    assert.match(output.text,/需新增卖出债券2亿元（释放存款敞口）/);
+    assert.match(output.text,/搜索未穷尽/);
+    assert.match(output.text,/成交、到账或额度前提/);
+    if (message.includes('逆回购')) assert.match(output.text,/逆回购7亿元，期限7天/);
+    else {
+      assert.doesNotMatch(output.text,/逆回购7亿元|已有买券|9亿元/);
+      assert.ok(output.text.indexOf('新增正回购融资') < output.text.indexOf('卖出债券'));
+    }
+  }
+});
+
+test('financing recovery discloses reverse repo target changes even without a reverse repo question', async () => {
+  const ledger=[];
+  const result={status:'feasible',originalReverseRepoTargetYuan:700_000_000,
+    alternative:{applicable:true,financingYuan:300_000_000,reverseRepoYuan:500_000_000,
+      requiresTargetChange:true,targetChange:{fromYuan:700_000_000,toYuan:500_000_000}}};
+  const tools={context:{},definitions:[{...definition,function:{...definition.function,name:'plan_trades'}}],
+    execute(name){ledger.push({toolName:name,result});return structuredClone(result);},getEvidence:()=>structuredClone(ledger)};
+  const output=await invokeAiDialogue({message:'请拟定融资方案',resolved,tools,
+    fetchImpl:scriptedFetch([toolTurn(toolCall('plan','plan_trades')),finalTurn({kind:'answer'})]).fetchImpl});
+  assert.match(output.text,/逆回购5亿元/);
+  assert.match(output.text,/由7亿元调整至5亿元/);
+  assert.match(output.text,/须经理明确接受/);
+});
+
 test('sale remediation restriction follows user constraints and explicit release', async () => {
   for (const [message,history,disabled] of [
     ['新增存款，不要卖券',undefined,true],
@@ -980,8 +1022,8 @@ test('a later planning result supersedes earlier planning evidence', async () =>
     }).fetchImpl });
   assert.deepEqual(output.dialogue.references, ['new_plan']);
   assert.equal(output.dialogue.evidence[0].result.main.financingYuan, 200);
-  assert.match(output.text, /融资0\.000002亿元/);
-  assert.doesNotMatch(output.text, /融资0\.000001亿元|plan_trades|new_plan/);
+  assert.match(output.text, /融资意向金额0\.000002亿元/);
+  assert.doesNotMatch(output.text, /融资意向金额0\.000001亿元|plan_trades|new_plan/);
 });
 
 test('clarification can finish without a tool call or claimed numeric result', async () => {

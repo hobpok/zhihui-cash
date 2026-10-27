@@ -392,6 +392,7 @@ function eventDialog(id){
  if(type==='settle'){const result=model.processExecutionBatch([id],'settle');if(result.stoppedReason)throw new Error(result.stoppedReason);}
  else if(type==='fill'){const event={eventId:`evt-${crypto.randomUUID()}`,sourceSequence:model.getState().execution.sourceSequence+1,type,instructionId:id,fillId:`fill-${crypto.randomUUID()}`,nominalYuan:parseMoney(fd.get('amount'),'亿')};if(financing||exchange){const t=fd.get('tradeTime');event.tradeTime=t?.length===5?t+':00':t;}model.recordEvent(event);}
  else throw new Error('请选择成交或结算。');
+ executionSelection.delete(id);
  closeDialog();changed(type==='settle'?'结算回报已录入；资金划拨已确认。':'成交回报已录入；账目与占用已核对。');}catch(error){formError(error);}};
 }
 function executionBatchDialog(action){

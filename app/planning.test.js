@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createModel, validateSaved } from './model.js';
 import { makePlanningFixture, E } from './planning-fixtures.js';
 import { createHistoricalComplexTemplate } from './test-fixtures/historical-complex.js';
+import { automaticInstructionLabel } from './display-labels.js';
 import { readPlanningSnapshot, validateIntent, preparePlanningDraft, applyConfirmedDraft,
   simulateDraft, compareDrafts } from './planning.js';
 
@@ -358,7 +359,13 @@ test('generated repo labels follow actual default and explicit tenors', () => {
     const result=preparePlanningDraft(model,next);
     const plan=result.main.deltas.find(d=>d.plan?.businessType==='interbank_repo_financing').plan;
     assert.equal(plan.repoTerms.tenorDays,days);
-    assert.equal(plan.label,`AI建议${days}天正回购`);
+    assert.equal(plan.label,automaticInstructionLabel(plan,model.getState().initialData));
+    assert.doesNotMatch(plan.label,/AI建议|AI拟单/);
+    for (const step of result.main.executionPath) {
+      const expectedPlan=result.main.appliedSaved.plans.find(plan=>plan.planId===step.planId);
+      assert.equal(step.planLabel,expectedPlan.label);
+      assert.equal(step.businessType,expectedPlan.businessType);
+    }
   }
 });
 

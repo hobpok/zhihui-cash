@@ -102,7 +102,7 @@ test('normal compliant purchases remain permitted and do not acquire improvement
 });
 
 test('release retains the existing initialization marker',()=>{
-  assert.equal(APP_RELEASE,'6-0.41.0');assert.equal(RESET_RELEASE,'6-0.28.0');
+  assert.equal(APP_RELEASE,'6-0.42.0');assert.equal(RESET_RELEASE,'6-0.28.0');
 });
 
 test('an otherwise compliant metric worsening within its limit forbids progressive relief and priority',()=>{

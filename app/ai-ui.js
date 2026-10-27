@@ -132,6 +132,61 @@ export function managerFixedTrades(result) {
   }).reverse();
 }
 
+// Render only actual changes, using the same candidate deltas that are confirmed.
+export function instructionChanges(candidate, names) {
+  return arr(candidate?.deltas).map(delta => {
+    const old = names.record?.(delta.planId);
+    const plan = delta.plan ?? (delta.patch ? { ...old, ...delta.patch } : delta);
+    const type = plan.businessType ?? old?.businessType;
+    const securityId = plan.securityId ?? old?.securityId;
+    const tenor = plan.repoTerms?.tenorDays ?? plan.tenorDays ?? old?.repoTerms?.tenorDays;
+    const remaining = securityId ? names.security?.(securityId)?.remainingTradingDays : null;
+    const title = delta.kind === 'add' ? human(type) : names.plan(delta.planId);
+    const parts = [title];
+    if (delta.kind === 'add' && securityId) parts.push(names.asset(securityId));
+    {
+      parts.push(delta.kind === 'delete' ? money(old?.targetYuan) : delta.kind === 'update' ? `${money(old?.targetYuan)} → ${money(plan.targetYuan)}` : money(plan.targetYuan));
+      if (Number.isSafeInteger(tenor)) parts.push(`${tenor}天`);
+      else if (Number.isSafeInteger(remaining)) parts.push(`剩余${remaining}天`);
+    }
+    return { kind: delta.kind, text: parts.join(' · ') };
+  });
+}
+function changeList(parent, candidate, names, prefix = '本次') {
+  const rows = instructionChanges(candidate, names);
+  for (const [kind, verb] of [['add', '新增'], ['update', '修改'], ['delete', '删除']]) {
+    const values = rows.filter(row => row.kind === kind).map(row => row.text);
+    list(parent, `${prefix}${verb}${values.length}笔指令`, values);
+  }
+  if (candidate?.deltasTruncated) note(parent, '指令变化清单不完整，请重新测算后确认。', 'ai-warning');
+}
+export function instructionConfirmLabel(candidate, prefix = '') {
+  const deltas = arr(candidate?.deltas);
+  return deltas.length && deltas.every(row => row.kind === 'add')
+    ? `${prefix}确认新增以上${deltas.length}笔指令` : `${prefix}确认以上指令变更`;
+}
+export function executionConditionText(value, candidate, names) {
+  let output = text(value);
+  const identities = new Map();
+  for (const step of arr(candidate?.executionPath)) {
+    if (step.planId) identities.set(step.planId, step.planLabel || names.plan(step.planId));
+    for (const condition of arr(step.machineConditions))
+      if (condition.planId && !identities.has(condition.planId)) identities.set(condition.planId, names.plan(condition.planId));
+  }
+  for (const [id, name] of [...identities].sort((a,b) => b[0].length-a[0].length)) output = output.split(id).join(name);
+  // Convert explicit yuan amounts only, never IDs, dates, ratios or already scaled amounts.
+  return output.replace(/(-?\d[\d,]*(?:\.\d+)?)\s*元/g, (raw, number) => {
+    const value = Number(number.replaceAll(',', ''));
+    return Number.isSafeInteger(value) ? money(value) : raw;
+  });
+}
+function pathConditions(parent, candidate, names) {
+  const path = arr(candidate.executionPath);
+  details(parent, '查看执行路径条件', section => list(section, '路径条件',
+    path.filter(row => row.condition || row.blocked).map(row =>
+      `${row.planLabel || names.plan(row.planId)} · ${row.blocked ? '受阻；' : ''}${executionConditionText(row.condition, candidate, names)}`)));
+}
+
 function planningEvidence(parent, result, names) {
   const section = node('section', 'ai-evidence');
   section.append(node('h3', '', '方案测算'));
@@ -140,34 +195,26 @@ function planningEvidence(parent, result, names) {
     line(section, '本次融资意向上限', money(result.intent.financing.maxAmountYuan));
   line(section, '融资期限', Number.isSafeInteger(result.intent?.financing?.tenorDays)
     ? `${result.intent.financing.tenorDays} 天` : '未知');
-  line(section, '逆回购指定意向金额', result.intent?.reverseRepo?.amountYuan === null
-    ? '未指定，由约束内余款测算' : money(result.intent?.reverseRepo?.amountYuan));
-  line(section, '逆回购期限', Number.isSafeInteger(result.intent?.reverseRepo?.tenorDays)
-    ? `${result.intent.reverseRepo.tenorDays} 天` : '未知');
   for (const term of arr(result.termAssumptions)) {
     note(section, `${human(term.businessType)}按 ${term.tenorDays} 天建议期限测算；加入指令区即确认本方案期限，可先在对话中修改。`, 'ai-warning');
   }
   const corrective = arr(result.remediation?.actions);
   if (result.remediation) {
-    list(section, '补救核算说明', arr(result.remediation.reasons).map(text));
-    list(section, '待经理确认的新增卖券', corrective.map(item =>
-      `${human(item.businessType)} · ${names.asset(item.securityId)} · ${money(item.targetYuan)}；${text(item.reason)}`));
-    if (corrective.length) note(section, '原投资目标完整保留。卖券实际成交后才释放额度，实际付款仍核验账户现金。', 'ai-warning');
+    if (corrective.length) note(section, '须先完成所列卖券成交以释放额度；付款时另核验实际账户现金。', 'ai-warning');
+    details(section, '查看卖券测算依据', body => {
+      list(body, '补救核算说明', arr(result.remediation.reasons).map(text));
+      list(body, '卖券依据', corrective.map(item => `${names.asset(item.securityId)} · ${money(item.targetYuan)}；${text(item.reason)}`));
+    });
   }
-  const fixed = managerFixedTrades(result).map(item =>
-    `${human(item.businessType)} · ${names.asset(item.securityId)} · ${money(item.targetYuan)}`);
-  list(section, '经理固定交易目标', fixed);
-  list(section, '保留的已有交易', arr(result.existingFixedTargets).map(item =>
-    `${names.plan(item.planId)} · ${names.asset(item.securityId)} · 尚需 ${money(item.remainingYuan)}${Number.isSafeInteger(item.remainingTradingDays) ? ` · 剩余 ${item.remainingTradingDays} 天` : ''}`));
   for (const [key, title] of [['main', '主方案'], ['alternative', '备选方案']]) {
     const item = result[key];
     if (!item) continue;
     const card = node('section', 'ai-candidate');
     card.append(node('h4', '', title));
-    line(card, '可应用性', yesNo(item.applicable));
     line(card, '状态', human(item.status));
     line(card, result.intent?.financing?.planId === null ? '本次新增融资' : '融资计划意向金额', money(item.financingYuan));
-    line(card, result.intent?.reverseRepo?.planId === null ? '本次新增逆回购' : '逆回购计划意向金额', money(item.reverseRepoYuan));
+    if (item.requiresTargetChange || arr(item.deltas).some(x => x.businessType === 'reverse_repo' || x.planId && x.planId === result.intent?.reverseRepo?.planId))
+      line(card, '逆回购目标金额', money(item.reverseRepoYuan));
     line(card, '预计期末余额（按结算假设）', money(item.projectedFinalCashYuan));
     if (item.requiresTargetChange) {
       note(card, `需经理同意调整原逆回购目标：${money(item.targetChange?.fromYuan)} → ${money(item.targetChange?.toYuan)}。`, 'ai-warning');
@@ -181,9 +228,7 @@ function planningEvidence(parent, result, names) {
     list(card, '前提与限制', conditions);
     list(card, '执行前提', arr(item.executionPrerequisites).map(x =>
       `${human(x.kind)} · ${names.plan(x.planId)}${Number.isSafeInteger(x.amountYuan) ? ` · ${money(x.amountYuan)}` : ''}`));
-    details(card, '查看执行路径条件', section => list(section, '路径条件',
-      arr(item.executionPath).filter(x => x.condition || x.blocked)
-        .map(x => `${names.plan(x.planId)} · ${x.blocked ? '受阻；' : ''}${text(x.condition)}`)));
+    pathConditions(card, item, names);
     list(card, '未满足目标', arr(item.unmetTargets).map(x =>
       `${names.plan(x.planId)}：未安排 ${money(x.unarrangedYuan)}`));
     list(card, '阻断及缺失规则', [...arr(item.finalRules?.blocking), ...arr(item.finalRules?.missing)]
@@ -337,10 +382,9 @@ function localCandidate(parent, key, title, candidate, names) {
   if (!candidate) return;
   const card = node('section', 'ai-candidate ai-local-candidate');
   card.append(node('h4', '', title));
-  line(card, '可应用性', yesNo(candidate.applicable));
   line(card, '状态', human(candidate.status));
   line(card, '本地融资意向金额', money(candidate.financingYuan));
-  line(card, '本地逆回购意向金额', money(candidate.reverseRepoYuan));
+
   line(card, '本地预计期末余额（按结算假设）', money(candidate.projectedFinalCashYuan));
   if (candidate.requiresTargetChange || key === 'alternative') {
     note(card, '该方案改变逆回购固定目标，确认前须明确同意。', 'ai-warning');
@@ -352,17 +396,11 @@ function localCandidate(parent, key, title, candidate, names) {
   if (candidate.search?.complete === false) helpNote(card, '搜索未穷尽，仅展示已验证候选。');
   if (arr(candidate.governmentBondSettlementAssumptions).length) conditions.push('含政府债交收假设');
   list(card, '本地复核前提', conditions);
-  list(card, '计划变化', arr(candidate.deltas).map(x => {
-    const plan = x.plan ?? x.patch ?? {};
-    const title = x.kind === 'add' ? `${human(plan.businessType)}${plan.securityId ? ` · ${names.asset(plan.securityId)}` : ''}` : names.plan(x.planId);
-    return `${human(x.kind)} · ${title}${x.kind === 'delete' ? '' : ` · ${money(plan.targetYuan)}`}`;
-  }));
+  changeList(card, candidate, names);
   list(card, '未满足目标', arr(candidate.unmetTargets).map(x => `${names.plan(x.planId)}：未安排 ${money(x.unarrangedYuan)}`));
   list(card, '执行前提', arr(candidate.stagedVerification?.prerequisites).map(x =>
     `${human(x.kind)} · ${names.plan(x.planId)}${Number.isSafeInteger(x.amountYuan) ? ` · ${money(x.amountYuan)}` : ''}`));
-  details(card, '查看执行路径条件', section => list(section, '路径条件',
-    arr(candidate.executionPath).filter(x => x.condition || x.blocked)
-      .map(x => `${names.plan(x.planId)} · ${x.blocked ? '受阻；' : ''}${text(x.condition)}`)));
+  pathConditions(card, candidate, names);
   list(card, '阻断及缺失规则', [...arr(candidate.finalRules?.blocking), ...arr(candidate.finalRules?.missing)]
     .map(x => `${text(x.ruleId)} · ${human(x.result)}`));
   parent.append(card);
@@ -411,6 +449,8 @@ export function setupAiUI({ model, getContext, prepareContext, onAuthError = () 
   try { pendingStorage = window.sessionStorage; } catch { /* Private browsing may disable storage. */ }
   const conversation = createAiConversation({ onAuthError, onChange: snapshot => render(snapshot), pendingStorage });
   const names = {
+    record: id => model.getState().plans?.find(item => item.planId === id),
+    security: id => model.getState().initialData?.securities?.find(item => item.securityId === id),
     asset(id) {
       if (!id) return '无需指定资产';
       const found = model.getState().initialData?.securities?.find(item => item.securityId === id);
@@ -567,11 +607,12 @@ export function setupAiUI({ model, getContext, prepareContext, onAuthError = () 
           }
           const planning = arr(snapshot.result.evidence).findLast(x => x.name === 'plan_trades' && x.result?.intent);
           if (planning) {
-            const executable = ['main', 'alternative'].filter(role => planning.result[role]?.applicable);
+            const executable = ['main', 'alternative'].filter(role => planning.result[role]?.applicable && !planning.result[role]?.deltasTruncated);
             if (executable.length) {
               const actionSection = node('section', 'ai-one-click');
               actionSection.append(node('h3', '', '加入指令区'));
-              note(actionSection, '确认金额与期限后加入指令区。');
+              for (const role of executable) changeList(actionSection, planning.result[role], names, executable.length > 1 ? (role === 'main' ? '主方案' : '备选方案') : '本次');
+              note(actionSection, '确认以下指令要素后加入指令区，随后仍需手动计算、核对与下达。');
               if (planning.result.remediation?.requiresManagerConfirmation)
                 remediationConsent(actionSection, 'ai-stage-remediation-consent');
               if (executable.some(role => role === 'alternative' || planning.result[role]?.requiresTargetChange)) {
@@ -583,7 +624,7 @@ export function setupAiUI({ model, getContext, prepareContext, onAuthError = () 
               const actions = node('div', 'ai-confirm-actions');
               for (const role of executable) {
                 const button = node('button', role === 'main' ? 'primary' : '',
-                  role === 'main' ? '将主方案加入指令区' : '将备选方案加入指令区');
+                  instructionConfirmLabel(planning.result[role], executable.length > 1 ? (role === 'main' ? '主方案：' : '备选方案：') : ''));
                 button.type = 'button'; button.dataset.aiStage = role;
                 button.addEventListener('click', () => void stageSuggestion(role)); actions.append(button);
               }
@@ -698,7 +739,7 @@ export function setupAiUI({ model, getContext, prepareContext, onAuthError = () 
         const actions = node('div', 'ai-confirm-actions');
         for (const role of confirmable) {
           const button = node('button', role === 'main' ? 'primary' : '',
-            role === 'main' ? '将本地主方案加入指令区' : '将本地备选方案加入指令区');
+            instructionConfirmLabel(result[role], role === 'main' ? '主方案：' : '备选方案：'));
           button.type = 'button'; button.dataset.aiConfirm = role;
           button.addEventListener('click', () => void confirm(role)); actions.append(button);
         }

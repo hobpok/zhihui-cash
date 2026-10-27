@@ -3,6 +3,7 @@ import { createModel } from './model.js';
 import { calculate } from './engine.js';
 import { evaluateCoreRules, coreRulesEnabled } from './core-rules.js';
 import { unitFor, isFinancing } from './business.js';
+import { automaticInstructionLabel } from './display-labels.js';
 
 const copy = value => JSON.parse(JSON.stringify(value));
 const integer = (value, label, zero = true) => {
@@ -311,6 +312,12 @@ export function simulateDraft(snapshot, deltas, options = {}) {
     nominalYuan:item.amountYuan,condition:item.condition,blocked:false,
     machineConditions:[],
   })));
+  const plansById = new Map(trial.state.plans.map(plan => [plan.planId, plan]));
+  for (const step of executionPath) {
+    const plan = plansById.get(step.planId);
+    step.planLabel = plan?.label ?? null;
+    step.businessType = plan?.businessType ?? null;
+  }
   return { applicable, status, deltas: copy(deltas), appliedSaved: trial.appliedSaved,
     finalRules, proposal, trace, search, candidates, executionPath,
     governmentBondSettlementAssumptions: trial.governmentBondSettlementAssumptions,
@@ -332,13 +339,14 @@ export function simulateDraft(snapshot, deltas, options = {}) {
 }
 
 function repoPlan(state, kind, tenorDays, amountYuan) {
-  return { label: kind === 'financing' ? `AI建议${tenorDays}天正回购` : `AI建议${tenorDays}天逆回购`,
+  const plan = {
     businessType: kind === 'financing' ? 'interbank_repo_financing' : 'reverse_repo',
     direction: kind === 'financing' ? 'inflow' : 'outflow',
     counterpartyId: null, issuerId: null, securityId: null, marketTier: null,
     targetYuan: amountYuan, termsNote: 'AI拟单草案；经理确认后仍须审核和手动下达',
     repoTerms: { market: 'INTERBANK', tenorDays, annualRate: null },
     tradeDate: state.context.businessDate, settlementDate: state.context.businessDate };
+  return { ...plan, label: automaticInstructionLabel(plan, state.initialData) };
 }
 
 function targetDelta(state, planId, amountYuan, kind, tenorDays) {
@@ -423,7 +431,8 @@ export function solveFundingAndReverseRepo(snapshot, intent, options = {}) {
     if (['interbank_repo_financing', 'exchange_repo_financing', 'reverse_repo',
       'exchange_repo_lending'].includes(plan.businessType))
       throw new Error('融资及逆回购须使用专用求解字段');
-    return { kind: 'add', plan: copy(plan) };
+    return { kind: 'add', plan: { ...copy(plan),
+      label: automaticInstructionLabel(plan, state.initialData) } };
   });
   const baseDeltas = (f, r) => [
     ...fixed,
