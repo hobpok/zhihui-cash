@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createAiDraft } from './ai-draft.js';
 import { makePlanningFixture, E } from './planning-fixtures.js';
 import { createPlanningTools } from '../server/planning-tools.js';
+import { automaticInstructionLabel } from './display-labels.js';
 
 function dialogueFor(caseId, { documentRevision = 3, automaticFinancing = false } = {}) {
   const { model, intent } = makePlanningFixture(caseId);
@@ -23,6 +24,42 @@ function dialogueFor(caseId, { documentRevision = 3, automaticFinancing = false 
       versions: context.versions, synthetic: context.synthetic } };
   return { model, intent, dialogue, requestId, documentRevision };
 }
+
+test('new AI fixed and repo plans use ordinary names while existing labels survive confirmation', () => {
+  for (const caseId of ['S1', 'S2', 'S3']) {
+    const { model, dialogue, requestId, documentRevision } = dialogueFor(caseId);
+    const originals = structuredClone(model.getState().plans);
+    const bridge = createAiDraft({ model });
+    const prepared = bridge.prepare(dialogue, { requestId, documentRevision });
+    assert.equal(prepared.error, '');
+    assert.equal(prepared.result.serverMismatch, false);
+    for (const delta of prepared.result.main.deltas.filter(delta => delta.kind === 'add')) {
+      assert.equal(delta.plan.label, automaticInstructionLabel(delta.plan, model.getState().initialData));
+      assert.doesNotMatch(delta.plan.label, /AI建议|AI拟单|cd_sell/);
+    }
+    for (const step of dialogue.evidence[0].result.main.executionPath)
+      assert.ok(step.planLabel && step.businessType);
+    assert.equal(bridge.confirm('main').error, '');
+    for (const original of originals)
+      assert.equal(model.getState().plans.find(plan => plan.planId === original.planId)?.label, original.label);
+  }
+});
+
+test('CD sale reconstruction uses the same ordinary label as its local draft', () => {
+  const { model, dialogue, requestId, documentRevision } = dialogueFor('S1');
+  const tools = createPlanningTools(JSON.parse(model.serialize()), { requestId, documentRevision });
+  dialogue.evidence[0].result = tools.execute('plan_trades', {
+    fixedTrades: [{ businessType: 'cd_sell', securityId: 'AI-A-CD-120', targetYuan: E }],
+    financing: { maxAmountYuan: 0 }, reverseRepo: { amountYuan: 0 },
+  });
+  const prepared = createAiDraft({ model }).prepare(dialogue, { requestId, documentRevision });
+  assert.equal(prepared.error, '');
+  assert.equal(prepared.result.serverMismatch, false);
+  const plan = prepared.result.intent.fixedPlans[0];
+  assert.equal(plan.label, automaticInstructionLabel(plan, model.getState().initialData));
+  assert.match(plan.label, /卖出/);
+  assert.doesNotMatch(plan.label, /AI建议|AI拟单|cd_sell/);
+});
 
 test('omitted financing cap survives server projection and stages either locally rechecked role', () => {
   for (const role of ['main', 'alternative']) {
@@ -155,15 +192,63 @@ test('server candidate tampering is disclosed and cannot be applied', () => {
   assert.equal(model.serialize(), before);
 });
 
-test('server delta tampering is ignored when the local summary still agrees', () => {
+test('server delta tampering blocks confirmation even when the amount summary still agrees', () => {
   const { model, dialogue, requestId, documentRevision } = dialogueFor('S2');
+  const before = model.serialize();
   dialogue.evidence[0].result.main.deltas = [{ kind: 'delete', planId: 'unrelated' }];
   const bridge = createAiDraft({ model });
   const state = bridge.prepare(dialogue, { requestId, documentRevision });
-  assert.equal(state.result.serverMismatch, false);
+  assert.equal(state.result.serverMismatch, true);
+  assert.ok(state.result.serverDiscrepancies.includes('主方案交易清单'));
   assert.ok(!state.result.main.deltas.some(delta => delta.planId === 'unrelated'));
+  assert.equal(bridge.confirm('main').appliedRole, null);
+  assert.equal(model.serialize(), before);
+});
+
+test('every projected delta field, missing lists and truncated lists are verified before confirmation', () => {
+  const { model, dialogue, requestId, documentRevision } = dialogueFor('S1');
+  const before = model.serialize();
+  const bridge = createAiDraft({ model });
+  const changes = [
+    candidate => { candidate.deltas[0].kind = 'delete'; },
+    candidate => { candidate.deltas[0].planId = 'unrelated'; },
+    candidate => { candidate.deltas[0].businessType = 'cd_sell'; },
+    candidate => { candidate.deltas[0].securityId = 'other-security'; },
+    candidate => { candidate.deltas[0].targetYuan += E; },
+    candidate => { candidate.deltas[0].tenorDays = 1; },
+    candidate => { delete candidate.deltas[0].planId; },
+    candidate => { candidate.deltas.reverse(); },
+    candidate => { candidate.deltas.pop(); },
+    candidate => { delete candidate.deltas; },
+    candidate => { candidate.deltasTruncated = true; },
+  ];
+  for (const change of changes) {
+    const tampered = structuredClone(dialogue);
+    change(tampered.evidence[0].result.main);
+    const state = bridge.prepare(tampered, { requestId, documentRevision });
+    assert.equal(state.error, '');
+    assert.equal(state.result.serverMismatch, true);
+    assert.ok(state.result.serverDiscrepancies.includes('主方案交易清单'));
+    assert.equal(bridge.confirm('main').appliedRole, null);
+    assert.equal(model.serialize(), before);
+  }
+  assert.equal(bridge.prepare(dialogue, { requestId, documentRevision }).result.serverMismatch, false);
   assert.equal(bridge.confirm('main').appliedRole, 'main');
-  assert.equal(model.getState().plans.some(plan => plan.businessType === 'reverse_repo'), true);
+});
+
+test('alternative delta updates and deletions must match the exact locally rechecked plan', () => {
+  const { model, dialogue, requestId, documentRevision } = dialogueFor('S3');
+  const before = model.serialize();
+  const candidate = dialogue.evidence[0].result.alternative;
+  const changedIndex = candidate.deltas.findIndex(delta => delta.kind !== 'add');
+  assert.ok(changedIndex >= 0);
+  candidate.deltas[changedIndex].planId = 'unrelated';
+  const bridge = createAiDraft({ model });
+  const state = bridge.prepare(dialogue, { requestId, documentRevision });
+  assert.equal(state.result.serverMismatch, true);
+  assert.ok(state.result.serverDiscrepancies.includes('备选方案交易清单'));
+  assert.equal(bridge.confirm('alternative', { acceptTargetChanges: true }).appliedRole, null);
+  assert.equal(model.serialize(), before);
 });
 
 test('invalid IDs, amounts and unrelated references are rejected before local planning', () => {

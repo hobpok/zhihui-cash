@@ -2,6 +2,7 @@
 // This module never exposes a model, saved run, exact snapshot token, or apply tool.
 import { createModel, validateSaved } from '../app/model.js';
 import { BUSINESS_TYPES, unitFor } from '../app/business.js';
+import { automaticInstructionLabel } from '../app/display-labels.js';
 import { buildCoreContext } from '../app/core-rules.js';
 import { deriveTemplateExposure, bankDepositLimitBps, SINGLE_DAY_DEMO_MODE } from '../app/initial-data.js';
 import { diagnoseExecution } from '../app/execution-diagnostics.js';
@@ -989,13 +990,14 @@ export function createPlanningTools(saved, { requestId, documentRevision, notes 
           if (['deposit','cd_buy','cd_sell'].includes(trade.businessType) &&
               (!id(issuerId) || !state.initialData.banks.some(b => b.bankId === issuerId)))
             throw new Error('银行资产发行行未知');
-          return { label: `AI拟单${trade.businessType}`, businessType: trade.businessType,
+          const plan = { businessType: trade.businessType,
             direction: BUSINESS_TYPES[trade.businessType].direction,
             counterpartyId: null, issuerId, targetYuan: trade.targetYuan,
             termsNote: 'AI拟单草案；须经理确认并重审', repoTerms: null,
             tradeDate: context.businessDate, settlementDate: context.businessDate,
             securityId: trade.securityId,
             marketTier: trade.businessType === 'cd_buy' ? 'secondary' : null };
+          return { ...plan, label: automaticInstructionLabel(plan, state.initialData) };
         });
         const intent = { requestId, fixedPlans,
           financing: { ...(financingPlan ? { planId: financingPlan.planId } : {}),

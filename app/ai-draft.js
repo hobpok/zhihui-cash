@@ -1,5 +1,6 @@
 // E5 boundary: server evidence describes intent; only the current local E2 model can create/apply a draft.
 import { BUSINESS_TYPES, unitFor } from './business.js';
+import { automaticInstructionLabel } from './display-labels.js';
 import { readPlanningSnapshot, preparePlanningDraft, applyConfirmedDraft } from './planning.js';
 
 const copy = value => structuredClone(value);
@@ -65,10 +66,11 @@ function reconstructIntent(projected, snapshot, requestId) {
       (!validId(issuerId) || !state.initialData.banks.some(bank => bank.bankId === issuerId)))
       throw new Error('固定交易发行行未知');
     const businessDate = state.context.businessDate;
-    return { label: `AI拟单${businessType}`, businessType, direction: BUSINESS_TYPES[businessType].direction,
+    const plan = { businessType, direction: BUSINESS_TYPES[businessType].direction,
       counterpartyId: null, issuerId, targetYuan, termsNote: 'AI拟单草案；须经理确认并重审',
       repoTerms: null, tradeDate: businessDate, settlementDate: businessDate, securityId,
       marketTier: businessType === 'cd_buy' ? 'secondary' : null };
+    return { ...plan, label: automaticInstructionLabel(plan, state.initialData) };
   });
   exact(projected.financing, ['planId', 'maxAmountYuan', 'tenorDays', 'unitYuan'], '融资意图');
   exact(projected.reverseRepo, ['planId', 'amountYuan', 'tenorDays', 'unitYuan'], '逆回购意图');
@@ -93,6 +95,20 @@ function reconstructIntent(projected, snapshot, requestId) {
     allowReduceReverseRepo: projected.allowReduceReverseRepo };
 }
 
+// Match the server's bounded public delta contract against the actual local draft.
+// Compare explicit nulls too: absent identifiers and zero targets have different meanings.
+function projectedDelta(delta) {
+  const safeMoney = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
+  return {
+    kind: ['add', 'update', 'delete'].includes(delta?.kind) ? delta.kind : null,
+    planId: validId(delta?.planId) ? delta.planId : null,
+    businessType: delta?.plan && BUSINESS_TYPES[delta.plan.businessType] ? delta.plan.businessType : null,
+    securityId: validId(delta?.plan?.securityId) ? delta.plan.securityId : null,
+    targetYuan: safeMoney(delta?.plan?.targetYuan ?? delta?.patch?.targetYuan),
+    tenorDays: safeMoney(delta?.plan?.repoTerms?.tenorDays),
+  };
+}
+
 function discrepancies(server, local) {
   const found = [];
   if (server.status !== local.status) found.push('总体状态');
@@ -105,6 +121,12 @@ function discrepancies(server, local) {
       ['projectedFinalCashYuan', '预计现金'], ['requiresTargetChange', '目标调整']]) {
       if (from[field] !== now[field]) found.push(`${label}${title}`);
     }
+    const expectedDeltas = now.deltas.map(projectedDelta);
+    if (from.deltasTruncated !== false || !Array.isArray(from.deltas) ||
+        from.deltas.length !== expectedDeltas.length ||
+        expectedDeltas.some((expected, index) => !object(from.deltas[index]) ||
+          Object.keys(expected).some(field => from.deltas[index][field] !== expected[field])))
+      found.push(`${label}交易清单`);
   }
   return found;
 }
