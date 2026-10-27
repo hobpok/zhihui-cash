@@ -136,5 +136,21 @@ export function createRemediationInitialTemplate({ businessDate = currentBusines
 
 // Defaults apply only to fresh starts; saved runs and templates keep their facts.
 export function createDefaultInitialTemplate(options) {
-  return createRemediationInitialTemplate(options);
+  return createAiFinancingInitialTemplate(options);
+}
+
+export function createAiFinancingInitialTemplate(options) {
+  const template = createRemediationInitialTemplate(options);
+  template.templateId = 'SIM-AI-FINANCING-COMPANY-GATES-20261027';
+  template.label = '500亿基金AI融资案例（未预设融资及卖券）';
+  template.provenance.note = '由三银行补救合成样例派生；未预设融资及卖券，保留广州银行可卖存单持仓，供AI测算融资和卖券补救。存续正回购25亿元中当日到期付款10亿元，另15亿元为未到期1天合成负债，保持资产减负债等于500亿元净资产。基础账户现金5亿元，其余持仓和四笔用款计划保留；所有数据均为合成参数，不代表真实交易或制度全文。';
+  template.draftPlans = template.draftPlans.filter(plan => plan.businessType !== 'interbank_repo_financing');
+  const maturity = template.maturityCashEvents.find(event => event.eventId === 'SIM-REPO-DUE-TODAY');
+  maturity.amountYuan = yuan(10);
+  maturity.label = '存续正回购10亿当日到期未还';
+  template.termWeights.liabilities.find(weight => weight.weightId === maturity.sourceLiabilityWeightId).amountYuan = yuan(10);
+  template.termWeights.positiveRepos.find(weight => weight.weightId === maturity.sourcePositiveRepoWeightId).amountYuan = yuan(10);
+  template.termWeights.liabilities.push({weightId:'TW-REPO-OUTSTANDING',label:'未到期正回购负债（15亿1天）',amountYuan:yuan(15),remainingTradingDays:1});
+  template.termWeights.positiveRepos.push({weightId:'TW-REPO-OUTSTANDING-ADJUSTMENT',label:'未到期正回购调整（15亿1天）',amountYuan:yuan(15),remainingTradingDays:1});
+  return normalizeInitialTemplate(template);
 }

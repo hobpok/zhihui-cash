@@ -1,13 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createModel } from '../app/model.js';
-import { createRemediationInitialTemplate } from '../app/default-scenario.js';
+import { createDefaultInitialTemplate, createRemediationInitialTemplate } from '../app/default-scenario.js';
 import { createAiDraft } from '../app/ai-draft.js';
-import { createPlanningTools } from './planning-tools.js';
+import { createPlanningTools, calculateCurrentCashRequirement } from './planning-tools.js';
 import { diagnosticPresentation, managerFixedTrades } from '../app/ai-ui.js';
+import { governmentBondMaturityRatio } from '../app/metric-display.js';
+import { readPlanningSnapshot, simulateDraft } from '../app/planning.js';
 
-function setup(requirements = {}) {
-  const model = createModel(); model.startFromTemplate(createRemediationInitialTemplate());
+function setup(requirements = {}, templateFactory = createRemediationInitialTemplate) {
+  const model = createModel(); model.startFromTemplate(templateFactory());
   const before = model.serialize(), requestId = 'remediation-integration', documentRevision = 1;
   const tools = createPlanningTools(JSON.parse(before), { requestId, documentRevision });
   const result = tools.execute('plan_trades', { reverseRepo: {} }, requirements);
@@ -20,6 +22,93 @@ function setup(requirements = {}) {
       versions: context.versions, synthetic: context.synthetic } };
   return { model, before, result, dialogue, requestId, documentRevision };
 }
+
+const E = 100000000;
+const portfolioRule = (rules, id) => rules.rows.find(row => row.ruleId === id && row.subjectId === 'PORTFOLIO');
+
+test('fresh four-plan default distinguishes current C02 repair from AI financing for all original targets', () => {
+  const { model, before, result, dialogue, requestId, documentRevision } = setup({}, createDefaultInitialTemplate);
+  const state = model.getState(), previous = JSON.parse(before);
+  assert.deepEqual(state.plans.map(plan => [plan.businessType, plan.targetYuan]),
+    [['deposit', 3 * E], ['deposit', 2 * E], ['cd_buy', E], ['reverse_repo', 20 * E]]);
+  assert.equal(state.summary.accountCashYuan, 5 * E);
+  assert.equal(state.summary.availableYuan, -5 * E);
+  assert.equal(portfolioRule(state.coreRules, 'C02').currentValue, .03);
+  assert.equal(portfolioRule(state.coreRules, 'C09').currentValue, 46200 / 515);
+  assert.deepEqual(state.coreRules.missing, []);
+  assert.deepEqual(governmentBondMaturityRatio(state),
+    { numeratorYuan: 20 * E, denominatorYuan: 500 * E, value: .04 });
+  const current = calculateCurrentCashRequirement(state);
+  assert.equal(current.scope, 'current_state_only');
+  assert.equal(current.additionalFinancingFillYuan, 10 * E);
+  assert.equal(current.financingTargetYuan, 0);
+
+  assert.equal(result.main.applicable, true);
+  assert.equal(result.main.financingYuan, 34 * E);
+  assert.equal(result.main.reverseRepoYuan, 20 * E);
+  assert.equal(result.main.projectedFinalCashYuan, 5 * E);
+  assert.equal(portfolioRule(result.main.finalRules, 'C02').currentValue, .05);
+  assert.equal(portfolioRule(result.main.finalRules, 'C09').numeratorYuan, 46700 * E);
+  assert.equal(portfolioRule(result.main.finalRules, 'C09').denominatorYuan, 549 * E);
+  assert.deepEqual(result.main.finalRules.blocking, []);
+  assert.deepEqual(result.main.finalRules.missing, []);
+  assert.deepEqual(result.remediation.actions.map(action => [action.securityId, action.targetYuan]),
+    [['SIM-GZ-CD-OLD', 2 * E]]);
+  assert.equal(model.serialize(), before);
+
+  const bridge = createAiDraft({ model });
+  assert.equal(bridge.prepare(dialogue, { requestId, documentRevision }).error, '');
+  assert.match(bridge.confirm('main').error, /明确同意新增卖券/);
+  assert.equal(model.serialize(), before);
+  assert.equal(bridge.confirm('main', { acceptRemediation: true }).appliedRole, 'main');
+  const after = JSON.parse(model.serialize());
+  assert.equal(after.plans.length, 6);
+  assert.equal(after.plans.find(plan => plan.businessType === 'interbank_repo_financing').targetYuan, 34 * E);
+  assert.equal(after.plans.find(plan => plan.businessType === 'interbank_repo_financing').repoTerms.tenorDays, 1);
+  assert.equal(after.plans.find(plan => plan.businessType === 'cd_sell').targetYuan, 2 * E);
+  for (const original of previous.plans)
+    assert.deepEqual(after.plans.find(plan => plan.planId === original.planId), original);
+  assert.deepEqual(after.execution, { ...previous.execution, requiresRefresh: true, requiresReapproval: true });
+  assert.deepEqual(governmentBondMaturityRatio(model.getState()), governmentBondMaturityRatio(state));
+});
+
+test('full default with corrective CD sale requires 34yi financing rather than 33.99yi', () => {
+  const model = createModel(); model.startFromTemplate(createDefaultInitialTemplate());
+  const snapshot = readPlanningSnapshot(model), before = model.serialize();
+  const date = snapshot.state.context.businessDate;
+  const sale = { kind: 'add', plan: { label: '合成补救卖券', businessType: 'cd_sell', direction: 'inflow',
+    issuerId: 'SIM-BANK-GZ', securityId: 'SIM-GZ-CD-OLD', targetYuan: 2 * E,
+    tradeDate: date, settlementDate: date, marketTier: 'secondary' } };
+  for (const amountYuan of [34 * E - 1000000, 34 * E]) {
+    const finance = { kind: 'add', plan: { label: '合成融资边界', businessType: 'interbank_repo_financing',
+      direction: 'inflow', targetYuan: amountYuan, tradeDate: date, settlementDate: date,
+      repoTerms: { market: 'INTERBANK', tenorDays: 1, annualRate: null } } };
+    const result = simulateDraft(snapshot, [sale, finance]);
+    const c02 = portfolioRule(result.finalRules, 'C02');
+    assert.equal(c02.numeratorYuan, 25 * E - (34 * E - amountYuan));
+    assert.equal(c02.result, amountYuan === 34 * E ? 'pass' : 'block');
+    assert.equal(result.applicable, amountYuan === 34 * E);
+  }
+  assert.equal(model.serialize(), before);
+});
+
+test('saved fresh four-plan default and legacy five-plan remediation retain their own facts', () => {
+  for (const [factory, count, maturity, financing] of [
+    [createDefaultInitialTemplate, 4, 10 * E, undefined],
+    [createRemediationInitialTemplate, 5, 25 * E, 49 * E],
+  ]) {
+    const model = createModel(); model.startFromTemplate(factory());
+    const saved = JSON.parse(model.serialize()), restored = createModel(saved);
+    const readBack = JSON.parse(restored.serialize());
+    assert.equal(readBack.plans.length, count);
+    assert.equal(readBack.initialData.maturityCashEvents[0].amountYuan, maturity);
+    assert.equal(readBack.plans.find(plan => plan.businessType === 'interbank_repo_financing')?.targetYuan, financing);
+    assert.deepEqual(readBack.plans, saved.plans);
+    assert.deepEqual(readBack.initialData, saved.initialData);
+    assert.deepEqual(readBack.execution.instructions, saved.execution.instructions);
+    assert.deepEqual(readBack.execution.journal, saved.execution.journal);
+  }
+});
 
 test('no-sale scenario reaches AI candidate, explicit sale consent, atomic add and no duplicate application', () => {
   const { model, before, result, dialogue, requestId, documentRevision } = setup();

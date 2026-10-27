@@ -1,4 +1,18 @@
 // Presentation only. Threshold decisions in the trading engine remain independent.
+import {deriveTemplateExposure} from './initial-data.js';
+
+// Opening portfolio composition: intraday cash flows never change this metric.
+export function governmentBondMaturityRatio(state) {
+  const template = state?.initialData;
+  const denominatorYuan = template?.portfolio?.navYuan ?? null;
+  if (!Number.isSafeInteger(denominatorYuan) || denominatorYuan <= 0)
+    return {numeratorYuan:null, denominatorYuan, value:null};
+  const numeratorYuan = deriveTemplateExposure(template).governmentBondWithinYearYuan;
+  const value = Number.isSafeInteger(numeratorYuan) && numeratorYuan >= 0 &&
+    Number.isSafeInteger(denominatorYuan) && denominatorYuan > 0 ? numeratorYuan / denominatorYuan : null;
+  return {numeratorYuan, denominatorYuan, value};
+}
+
 const integer = n => typeof n === 'number' && Number.isSafeInteger(n) || typeof n === 'string' && /^-?\d+$/.test(n);
 export function metricPresentation(row) {
   // Deposit gates describe permission for a new trade, not a stock violation.

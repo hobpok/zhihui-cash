@@ -1,6 +1,7 @@
 // D iteration: read-only analysis of the current simulation. Never mutates the ledger.
 import { evaluateCoreRules } from './core-rules.js';
 import { HISTORICAL_METRICS } from './metric-catalog.js';
+import { governmentBondMaturityRatio } from './metric-display.js';
 
 const CORE_IDS = [...Array.from({length:9},(_,i)=>`C${String(i+1).padStart(2,'0')}`), 'C05-DEPOSIT'];
 const CORE_NAMES = {
@@ -173,7 +174,7 @@ export function buildAnalysis(state,{stepId=null,nowMs=null}={}) {
       counts[row.status]++;
     }
   }
-  return {coreRows,ruleDirectory,counts,
+  return {coreRows,ruleDirectory,counts,governmentBondMaturityRatio:governmentBondMaturityRatio(state),
     context:{runId:state?.context?.runId ?? null,businessDate:asOfDate,
       templateKind:state?.initialData?.provenance?.kind ?? null,
       coreEnabled:result.enabled,source,asOfDate},
